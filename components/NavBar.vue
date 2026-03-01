@@ -72,16 +72,38 @@
       Sync
     </button>
 
+    <!-- User profile -->
+    <div v-if="user" class="user-section">
+      <div class="user-info">
+        <img
+          :src="user.user_metadata?.avatar_url"
+          :alt="user.user_metadata?.user_name"
+          class="user-avatar"
+        />
+        <span class="user-name">{{ user.user_metadata?.user_name || user.email }}</span>
+      </div>
+      <button class="logout-btn" @click="handleLogout" title="Sign out">
+        <LogOut :size="14" :stroke-width="1.8" />
+      </button>
+    </div>
+
     <!-- Search Modal -->
     <SearchModal v-model="searchOpen" />
   </nav>
 </template>
 
 <script setup lang="ts">
-import { LayoutDashboard, Component, Layers, RefreshCw, Settings, Search, Github, Figma } from 'lucide-vue-next'
+import { LayoutDashboard, Component, Layers, RefreshCw, Settings, Search, Github, Figma, LogOut } from 'lucide-vue-next'
 
 const route = useRoute()
+const supabase = useSupabaseClient()
+const user = useSupabaseUser()
 const searchOpen = ref(false)
+
+async function handleLogout() {
+  await supabase.auth.signOut()
+  navigateTo('/login')
+}
 
 const tabs = [
   { key: 'dashboard', label: 'Dashboard', to: '/dashboard', icon: LayoutDashboard },
@@ -199,5 +221,51 @@ onMounted(() => {
   transition: background 120ms ease;
   width: 100%;
   font-family: inherit;
+}
+.user-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 4px 0;
+  margin-top: 8px;
+  border-top: 1px solid #f0f0f0;
+}
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.user-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.user-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: #71717a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.logout-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: none;
+  color: #a1a1aa;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 120ms ease;
+  flex-shrink: 0;
+}
+.logout-btn:hover {
+  color: #ef4444;
+  background: #fef2f2;
 }
 </style>
