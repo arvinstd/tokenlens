@@ -519,6 +519,9 @@ definePageMeta({
   layout: false,
 })
 
+// ── Preferences ──────────────────────────────────────
+const { sourceOfTruth: savedSourceOfTruth, fetchPreferences, updatePreferences } = usePreferences()
+
 // ── Figma real connection ──────────────────────────────
 const { connection: figmaConnection, connect: figmaConnect, loading: figmaLoadingState, error: figmaErrorState } = useFigmaConnection()
 const figmaPat = ref('')
@@ -532,12 +535,22 @@ const figmaTokenCount = ref(0)
 const step = ref(0)
 const figmaConnected = ref(false)
 const gitConnected = ref(false)
-const sourceOfTruth = ref<'figma' | 'code'>('code')
+const sourceOfTruth = ref<'figma' | 'code'>('figma')
 const scanning = ref(false)
 const scanProgress = ref(0)
 const displayScore = ref(0)
 
 let scanInterval: ReturnType<typeof setInterval> | null = null
+
+// Load existing preferences (if user is re-running onboarding)
+onMounted(async () => {
+  try {
+    await fetchPreferences()
+    sourceOfTruth.value = savedSourceOfTruth.value
+  } catch {
+    // Default to figma if no preferences exist
+  }
+})
 
 // ── Computed ───────────────────────────────────────────
 const canContinue = computed(() => {
@@ -603,10 +616,20 @@ function connectGit() {
   gitConnected.value = true
 }
 
-function startScan() {
+async function startScan() {
   scanning.value = true
   scanProgress.value = 0
   displayScore.value = 0
+
+  // Save preferences before scan animation
+  try {
+    await updatePreferences({
+      sourceOfTruth: sourceOfTruth.value,
+      onboardingCompleted: true,
+    })
+  } catch {
+    // Continue with scan even if preference save fails
+  }
 
   const targetScore = 73
   const totalDuration = 3000

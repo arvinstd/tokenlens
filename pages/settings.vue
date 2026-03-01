@@ -276,11 +276,81 @@
         </div>
       </div>
     </div>
+
+    <!-- Preferences Card -->
+    <div style="margin-top: 16px; border: 1px solid #E4E4E7; border-radius: 14px; overflow: hidden; max-width: 560px">
+      <div style="padding: 20px; border-bottom: 1px solid #F0F0F1; display: flex; align-items: center; gap: 12px">
+        <div style="width: 36px; height: 36px; border-radius: 10px; background: #F4F4F5; display: flex; align-items: center; justify-content: center; flex-shrink: 0">
+          <Settings2 :size="18" color="#52525b" />
+        </div>
+        <div>
+          <div style="font-size: 14px; font-weight: 600; color: #09090B">Preferences</div>
+          <div style="font-size: 12px; color: #71717A">Source of truth and workspace settings</div>
+        </div>
+      </div>
+      <div style="padding: 20px">
+        <!-- Source of truth toggle -->
+        <label style="font-size: 12px; font-weight: 600; color: #09090B; display: block; margin-bottom: 8px">
+          Source of truth
+        </label>
+        <div style="display: flex; gap: 0; border: 1px solid #E4E4E7; border-radius: 10px; overflow: hidden; margin-bottom: 8px">
+          <button
+            class="sot-btn"
+            :class="{ 'sot-active': sourceOfTruth === 'figma' }"
+            @click="handleSourceChange('figma')"
+            :disabled="prefLoading"
+          >
+            <svg width="14" height="14" viewBox="0 0 38 57" fill="none">
+              <path d="M19 28.5a9.5 9.5 0 1 1 19 0 9.5 9.5 0 0 1-19 0z" fill="#1ABCFE" />
+              <path d="M0 47.5A9.5 9.5 0 0 1 9.5 38H19v9.5a9.5 9.5 0 1 1-19 0z" fill="#0ACF83" />
+              <path d="M19 0v19h9.5a9.5 9.5 0 1 0 0-19H19z" fill="#FF7262" />
+              <path d="M0 9.5A9.5 9.5 0 0 0 9.5 19H19V0H9.5A9.5 9.5 0 0 0 0 9.5z" fill="#F24E1E" />
+              <path d="M0 28.5A9.5 9.5 0 0 0 9.5 38H19V19H9.5A9.5 9.5 0 0 0 0 28.5z" fill="#A259FF" />
+            </svg>
+            Figma
+          </button>
+          <button
+            class="sot-btn"
+            :class="{ 'sot-active': sourceOfTruth === 'code' }"
+            @click="handleSourceChange('code')"
+            :disabled="prefLoading"
+          >
+            <Code2 :size="14" :stroke-width="2" />
+            Code
+          </button>
+        </div>
+        <p style="font-size: 12px; color: #71717A; margin: 0 0 16px; line-height: 1.5">
+          <template v-if="sourceOfTruth === 'figma'">
+            <strong style="color: #52525B">Figma leads.</strong> Design values are the canonical source. Code tokens that differ from Figma are flagged as drifted.
+          </template>
+          <template v-else>
+            <strong style="color: #52525B">Code leads.</strong> Code values are the canonical source. Figma variables that differ from code are flagged as drifted.
+          </template>
+        </p>
+
+        <!-- Source saved feedback -->
+        <div v-if="prefSaved" style="padding: 8px 12px; background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 8px; font-size: 12px; color: #166534; display: flex; align-items: center; gap: 6px; margin-bottom: 16px">
+          <Check :size="12" :stroke-width="3" />
+          Source of truth updated. Re-run diff to apply changes.
+        </div>
+
+        <!-- Divider -->
+        <div style="border-top: 1px solid #F0F0F1; padding-top: 16px">
+          <button
+            class="btn-text"
+            @click="handleResetOnboarding"
+          >
+            <RotateCcw :size="13" :stroke-width="2" />
+            Re-run onboarding
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { Check, RefreshCw, Link2, Github, GitCompareArrows } from 'lucide-vue-next'
+import { Check, RefreshCw, Link2, Github, GitCompareArrows, Settings2, Code2, RotateCcw } from 'lucide-vue-next'
 import type { DiffSummaryData } from '~/types'
 
 // === Figma ===
@@ -307,9 +377,13 @@ const ghSyncResult = ref<{ tokenCount: number; categories: Record<string, number
 // === Diff ===
 const { summary: diffSummary, computing: diffComputing, computeDiff, fetchResults: fetchDiffResults } = useTokenDiff()
 
+// === Preferences ===
+const { sourceOfTruth, fetchPreferences, updatePreferences, loading: prefLoading } = usePreferences()
+const prefSaved = ref(false)
+
 // Fetch statuses on mount
 onMounted(async () => {
-  await Promise.all([fetchStatus(), ghFetchStatus()])
+  await Promise.all([fetchStatus(), ghFetchStatus(), fetchPreferences()])
   // Load existing diff results if both connected
   if (connection.value.connected && ghConnection.value.connected) {
     fetchDiffResults()
@@ -383,6 +457,28 @@ async function handleComputeDiff() {
     await computeDiff()
   } catch {
     // Error is handled by composable
+  }
+}
+
+// Preferences handlers
+async function handleSourceChange(value: 'figma' | 'code') {
+  if (value === sourceOfTruth.value) return
+  prefSaved.value = false
+  try {
+    await updatePreferences({ sourceOfTruth: value })
+    prefSaved.value = true
+    setTimeout(() => { prefSaved.value = false }, 4000)
+  } catch {
+    // Error handled by composable
+  }
+}
+
+async function handleResetOnboarding() {
+  try {
+    await updatePreferences({ onboardingCompleted: false })
+    navigateTo('/onboarding')
+  } catch {
+    // Error handled by composable
   }
 }
 
@@ -465,5 +561,52 @@ function formatDate(dateStr: string): string {
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+.sot-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 16px;
+  background: #FFFFFF;
+  color: #71717A;
+  border: none;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 120ms ease;
+  font-family: inherit;
+}
+.sot-btn:first-child {
+  border-right: 1px solid #E4E4E7;
+}
+.sot-btn:hover:not(:disabled) {
+  background: #F4F4F5;
+}
+.sot-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.sot-active {
+  background: #09090B !important;
+  color: #FFFFFF;
+}
+.btn-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  background: none;
+  border: none;
+  font-size: 13px;
+  font-weight: 500;
+  color: #71717A;
+  cursor: pointer;
+  font-family: inherit;
+  transition: color 120ms ease;
+}
+.btn-text:hover {
+  color: #09090B;
 }
 </style>

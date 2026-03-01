@@ -146,3 +146,9 @@ export interface DiffSummaryData {
   missingInFigma: number
   healthScore: number
 }
+
+// User preferences
+export interface UserPreferences {
+  sourceOfTruth: 'figma' | 'code'
+  onboardingCompleted: boolean
+}

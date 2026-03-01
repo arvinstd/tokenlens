@@ -6,7 +6,7 @@
       <div :style="{ display: 'flex', gap: '4px', alignItems: 'center', whiteSpace: 'nowrap' }">
         <span :style="{ fontSize: '13px', fontWeight: 500, color: '#1a1a1a' }">Dashboard</span>
         <span :style="{ fontSize: '11px', color: '#d4d4d8' }">&middot;</span>
-        <span :style="{ fontSize: '11px', color: '#999' }">Source of truth: Figma</span>
+        <span :style="{ fontSize: '11px', color: '#999' }">Source of truth: {{ sourceOfTruth === 'code' ? 'Code' : 'Figma' }}</span>
       </div>
       <div :style="{ display: 'flex', alignItems: 'center', gap: '14px' }">
         <!-- Last sync -->
@@ -185,6 +185,7 @@ const { connection: figmaConn, fetchStatus: fetchFigmaStatus } = useFigmaConnect
 const { connection: ghConn, fetchStatus: fetchGhStatus } = useGitHubConnection()
 const figmaTokens = useFigmaTokens()
 const { summary: diffSummary, categories: diffCategories, fetchResults: fetchDiffResults } = useTokenDiff()
+const { sourceOfTruth, fetchPreferences } = usePreferences()
 
 // Mock data as fallback
 const mock = useMockData()
@@ -194,7 +195,7 @@ const hasDiff = computed(() => diffSummary.value && diffSummary.value.total > 0)
 
 // Fetch real data on mount
 onMounted(async () => {
-  await Promise.all([fetchFigmaStatus(), fetchGhStatus()])
+  await Promise.all([fetchFigmaStatus(), fetchGhStatus(), fetchPreferences()])
   if (figmaConn.value.connected) {
     await figmaTokens.fetchTokens()
   }
