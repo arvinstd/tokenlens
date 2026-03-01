@@ -104,6 +104,31 @@ export async function getImages(pat: string, fileKey: string, nodeIds: string[])
   }>(`/images/${fileKey}?ids=${encodeURIComponent(ids)}&format=png&scale=2`, { pat })
 }
 
+/** Get local variables for a file */
+export async function getLocalVariables(pat: string, fileKey: string) {
+  return figmaFetch<{
+    status: number
+    error: boolean
+    meta: {
+      variableCollections: Record<string, {
+        id: string
+        name: string
+        modes: Array<{ modeId: string; name: string }>
+        defaultModeId: string
+        variableIds: string[]
+      }>
+      variables: Record<string, {
+        id: string
+        name: string
+        resolvedType: 'COLOR' | 'FLOAT' | 'STRING' | 'BOOLEAN'
+        valuesByMode: Record<string, any>
+        scopes: string[]
+        codeSyntax?: { WEB?: string }
+      }>
+    }
+  }>(`/files/${fileKey}/variables/local`, { pat })
+}
+
 /** Validate a PAT by fetching /me */
 export async function validatePat(pat: string) {
   return figmaFetch<{ id: string; email: string; handle: string }>('/me', { pat })

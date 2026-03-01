@@ -1,6 +1,6 @@
 import { serverSupabaseClient } from '#supabase/server'
-import { getFileStyles, getFileComponents, getNodes } from '~/server/utils/figma-client'
-import { parseAllStyles } from '~/server/utils/figma-parser'
+import { getFileStyles, getFileComponents, getNodes, getLocalVariables } from '~/server/utils/figma-client'
+import { parseAllStyles, parseVariables } from '~/server/utils/figma-parser'
 import { requireUser } from '~/server/utils/auth'
 
 export default defineEventHandler(async (event) => {
@@ -20,8 +20,8 @@ export default defineEventHandler(async (event) => {
 
   const { figma_pat: pat, file_key: fileKey } = connection
 
-  // 2. Fetch styles + components in parallel
-  const [stylesResponse, fileData] = await Promise.all([
+  // 2. Fetch styles + components + variables in parallel
+  const [stylesResponse, fileData, variablesResponse] = await Promise.all([
     getFileStyles(pat, fileKey).catch((error: any) => {
       if (error?.status === 403 || error?.statusCode === 403) {
         throw createError({ statusCode: 403, message: 'Figma token expired or revoked' })
@@ -29,14 +29,19 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 500, message: 'Failed to fetch Figma styles' })
     }),
     getFileComponents(pat, fileKey).catch(() => null),
+    getLocalVariables(pat, fileKey).catch((error: any) => {
+      // Variables API requires Enterprise/Organization plan — fail silently
+      console.warn('[figma/sync] Variables API not available:', error?.status || error?.message)
+      return null
+    }),
   ])
 
-  // === TOKENS ===
+  // === TOKENS (Styles + Variables) ===
   const styles = stylesResponse.meta?.styles || []
 
-  let tokens: any[] = []
+  // 3a. Parse style tokens (FILL, TEXT, EFFECT)
+  let styleTokens: any[] = []
   if (styles.length > 0) {
-    // 3. Batch fetch nodes (50 per request)
     const nodeIds = styles.map(s => s.node_id)
     const allNodes: Record<string, { document: any }> = {}
     const BATCH_SIZE = 50
@@ -51,17 +56,32 @@ export default defineEventHandler(async (event) => {
       }
     }
 
-    // 4. Parse + deduplicate tokens
-    const rawTokens = parseAllStyles(styles, allNodes)
-    const tokenMap = new Map<string, typeof rawTokens[0]>()
-    for (const token of rawTokens) {
-      tokenMap.set(token.name, token)
-    }
-    tokens = Array.from(tokenMap.values())
+    styleTokens = parseAllStyles(styles, allNodes)
+    console.log(`[figma/sync] Parsed ${styleTokens.length} style tokens`)
+  }
 
-    console.log(`[figma/sync] Parsed ${rawTokens.length} raw tokens → ${tokens.length} unique tokens`)
+  // 3b. Parse variable tokens (COLOR, FLOAT — spacing, radius, etc.)
+  let variableTokens: any[] = []
+  if (variablesResponse?.meta) {
+    const { variableCollections, variables } = variablesResponse.meta
+    variableTokens = parseVariables(variableCollections, variables)
+    console.log(`[figma/sync] Parsed ${variableTokens.length} variable tokens`)
+  }
 
-    // 5. Replace old tokens
+  // 4. Merge + deduplicate (variables take priority over styles for same name)
+  const tokenMap = new Map<string, any>()
+  for (const token of styleTokens) {
+    tokenMap.set(token.name, token)
+  }
+  for (const token of variableTokens) {
+    tokenMap.set(token.name, token) // variables override styles
+  }
+  const tokens = Array.from(tokenMap.values())
+
+  console.log(`[figma/sync] Total: ${styleTokens.length} styles + ${variableTokens.length} variables → ${tokens.length} unique tokens`)
+
+  // 5. Replace old tokens in DB
+  if (tokens.length > 0) {
     await supabase.from('figma_tokens').delete().eq('user_id', user.id)
 
     const BATCH = 50

@@ -172,3 +172,199 @@ export function parseAllStyles(
 
   return allTokens
 }
+
+// ═══════════════════════════════════════════════════
+// FIGMA VARIABLES PARSER
+// ═══════════════════════════════════════════════════
+
+interface VariableCollection {
+  id: string
+  name: string
+  modes: Array<{ modeId: string; name: string }>
+  defaultModeId: string
+  variableIds: string[]
+}
+
+interface FigmaVariable {
+  id: string
+  name: string
+  resolvedType: 'COLOR' | 'FLOAT' | 'STRING' | 'BOOLEAN'
+  valuesByMode: Record<string, any>
+  scopes: string[]
+  codeSyntax?: { WEB?: string }
+}
+
+/** Detect category from variable scopes, collection name, or variable name */
+function detectVariableCategory(
+  variable: FigmaVariable,
+  collectionName: string
+): string {
+  const name = variable.name.toLowerCase()
+  const collection = collectionName.toLowerCase()
+  const scopes = variable.scopes || []
+
+  // By resolved type
+  if (variable.resolvedType === 'COLOR') return 'Colors'
+
+  // By Figma scopes
+  if (scopes.includes('GAP') || scopes.includes('WIDTH_HEIGHT')) return 'Spacing'
+  if (scopes.includes('CORNER_RADIUS')) return 'Border Radius'
+  if (scopes.includes('FONT_SIZE') || scopes.includes('LINE_HEIGHT') || scopes.includes('FONT_WEIGHT') || scopes.includes('LETTER_SPACING')) return 'Typography'
+  if (scopes.includes('STROKE_FLOAT')) return 'Border Width'
+  if (scopes.includes('OPACITY')) return 'Opacity'
+  if (scopes.includes('EFFECT_FLOAT')) return 'Shadows'
+
+  // By variable name patterns
+  if (/spacing|gap|padding|margin/i.test(name)) return 'Spacing'
+  if (/radius|corner|rounded/i.test(name)) return 'Border Radius'
+  if (/font|text|typo|line.?height|letter.?spacing/i.test(name)) return 'Typography'
+  if (/shadow|elevation/i.test(name)) return 'Shadows'
+  if (/border.?width|stroke/i.test(name)) return 'Border Width'
+  if (/opacity|alpha/i.test(name)) return 'Opacity'
+  if (/size|width|height/i.test(name)) return 'Sizing'
+  if (/color|brand|accent|neutral|grey|gray|surface|background|foreground/i.test(name)) return 'Colors'
+
+  // By collection name
+  if (/color/i.test(collection)) return 'Colors'
+  if (/spacing/i.test(collection)) return 'Spacing'
+  if (/radius/i.test(collection)) return 'Border Radius'
+  if (/typo/i.test(collection)) return 'Typography'
+  if (/shadow/i.test(collection)) return 'Shadows'
+  if (/size|sizing/i.test(collection)) return 'Sizing'
+
+  // Fallback based on type
+  if (variable.resolvedType === 'FLOAT') return 'Spacing'
+  return 'Other'
+}
+
+/** Detect token name prefix from category */
+function categoryToPrefix(category: string): string {
+  switch (category) {
+    case 'Colors': return 'color'
+    case 'Spacing': return 'spacing'
+    case 'Border Radius': return 'border-radius'
+    case 'Typography': return 'font'
+    case 'Shadows': return 'shadow'
+    case 'Sizing': return 'sizing'
+    case 'Border Width': return 'border-width'
+    case 'Opacity': return 'opacity'
+    default: return 'var'
+  }
+}
+
+/** Resolve a variable value, following aliases to final values */
+function resolveVariableValue(
+  value: any,
+  resolvedType: string,
+  allVariables: Record<string, FigmaVariable>,
+  defaultModeIds: Map<string, string>,
+  visited: Set<string> = new Set()
+): string | null {
+  // Handle alias (variable reference)
+  if (value && typeof value === 'object' && value.type === 'VARIABLE_ALIAS') {
+    const aliasId = value.id
+    if (visited.has(aliasId)) return null // circular reference
+    visited.add(aliasId)
+
+    const aliasVar = allVariables[aliasId]
+    if (!aliasVar) return null
+
+    // Get default mode value of the alias
+    // Find which collection this alias belongs to
+    const aliasModeId = findDefaultModeForVariable(aliasVar, defaultModeIds)
+    if (!aliasModeId) return null
+
+    const aliasValue = aliasVar.valuesByMode[aliasModeId]
+    return resolveVariableValue(aliasValue, aliasVar.resolvedType, allVariables, defaultModeIds, visited)
+  }
+
+  // Handle COLOR
+  if (resolvedType === 'COLOR' && value && typeof value === 'object' && 'r' in value) {
+    return rgbaToHex(value)
+  }
+
+  // Handle FLOAT
+  if (resolvedType === 'FLOAT' && typeof value === 'number') {
+    // Round to 2 decimal places
+    const rounded = Math.round(value * 100) / 100
+    return String(rounded)
+  }
+
+  // Handle STRING
+  if (resolvedType === 'STRING' && typeof value === 'string') {
+    return value
+  }
+
+  // Handle BOOLEAN
+  if (resolvedType === 'BOOLEAN' && typeof value === 'boolean') {
+    return String(value)
+  }
+
+  return value !== undefined && value !== null ? String(value) : null
+}
+
+/** Find the default mode ID for a variable by checking its valuesByMode keys */
+function findDefaultModeForVariable(
+  variable: FigmaVariable,
+  defaultModeIds: Map<string, string>
+): string | null {
+  const modeIds = Object.keys(variable.valuesByMode)
+  // Try to match with known default modes
+  for (const modeId of modeIds) {
+    if (defaultModeIds.has(modeId)) return modeId
+  }
+  // Fallback: use first mode
+  return modeIds[0] || null
+}
+
+/** Parse Figma Variables into normalized tokens */
+export function parseVariables(
+  collections: Record<string, VariableCollection>,
+  variables: Record<string, FigmaVariable>
+): ParsedToken[] {
+  const tokens: ParsedToken[] = []
+
+  // Build default mode map: modeId → collectionId
+  const defaultModeIds = new Map<string, string>()
+  for (const [, collection] of Object.entries(collections)) {
+    defaultModeIds.set(collection.defaultModeId, collection.id)
+  }
+
+  // Build collection lookup: variableId → collectionName
+  const variableToCollection = new Map<string, string>()
+  for (const [, collection] of Object.entries(collections)) {
+    for (const varId of collection.variableIds) {
+      variableToCollection.set(varId, collection.name)
+    }
+  }
+
+  for (const [varId, variable] of Object.entries(variables)) {
+    // Skip BOOLEAN and STRING variables (not design tokens)
+    if (variable.resolvedType === 'BOOLEAN' || variable.resolvedType === 'STRING') continue
+
+    const collectionName = variableToCollection.get(varId) || 'Unknown'
+    const category = detectVariableCategory(variable, collectionName)
+    const prefix = categoryToPrefix(category)
+
+    // Get the default mode value
+    const defaultModeId = findDefaultModeForVariable(variable, defaultModeIds)
+    if (!defaultModeId) continue
+
+    const rawValue = variable.valuesByMode[defaultModeId]
+    const resolvedValue = resolveVariableValue(rawValue, variable.resolvedType, variables, defaultModeIds)
+    if (!resolvedValue) continue
+
+    // Normalize variable name: "spacing/sm" → "spacing.sm", "Colors/Brand/Primary" → "color.brand.primary"
+    const normalizedName = normalizeTokenName(variable.name, prefix)
+
+    tokens.push({
+      name: normalizedName,
+      category,
+      figmaValue: resolvedValue,
+      nodeId: varId,
+      styleType: `VARIABLE_${variable.resolvedType}`,
+    })
+  }
+
+  return tokens
+}
