@@ -16,6 +16,9 @@ export default defineNuxtConfig({
       include: ['/dashboard(.*)', '/components(.*)', '/tokens(.*)', '/settings(.*)'],
       exclude: ['/', '/onboarding'],
     },
+    cookieOptions: {
+      secure: process.env.NODE_ENV === 'production',
+    },
   },
 
   googleFonts: {

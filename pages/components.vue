@@ -6,398 +6,321 @@
       <template v-if="!selected">
         <!-- Header -->
         <div style="padding: 40px 0 0">
-          <div style="display: flex; align-items: center; justify-content: space-between">
+          <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 16px">
             <div>
               <h1 style="font-size: 24px; font-weight: 700; letter-spacing: -0.8px; color: #09090B; margin: 0">
                 Components
               </h1>
               <p style="font-size: 13px; color: #71717A; margin: 8px 0 0">
-                {{ componentCount }} components &middot; Figma &harr; Code sync status
+                {{ totalCount }} components &middot; Figma &harr; Code sync status
               </p>
             </div>
-            <!-- Grid/List toggle -->
-            <div style="display: flex; background: #f4f4f5; border-radius: 8px; padding: 2px">
-              <button
-                class="view-toggle"
-                :class="{ 'view-toggle--active': viewMode === 'grid' }"
-                @click="viewMode = 'grid'"
-              >
-                <LayoutGrid :size="14" />
-              </button>
-              <button
-                class="view-toggle"
-                :class="{ 'view-toggle--active': viewMode === 'list' }"
-                @click="viewMode = 'list'"
-              >
-                <List :size="14" />
-              </button>
+            <div style="display: flex; align-items: center; gap: 8px">
+              <!-- Search -->
+              <div style="position: relative">
+                <Search :size="14" color="#A1A1AA" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); pointer-events: none" />
+                <input
+                  v-model="searchQuery"
+                  placeholder="Search components..."
+                  class="search-input"
+                />
+              </div>
+              <!-- Grid/List toggle -->
+              <div style="display: flex; background: #f4f4f5; border-radius: 8px; padding: 2px">
+                <button class="view-toggle" :class="{ 'view-toggle--active': viewMode === 'grid' }" @click="viewMode = 'grid'">
+                  <LayoutGrid :size="14" />
+                </button>
+                <button class="view-toggle" :class="{ 'view-toggle--active': viewMode === 'list' }" @click="viewMode = 'list'">
+                  <List :size="14" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
 
-        <!-- Filter tabs -->
-        <div style="display: flex; align-items: center; gap: 4px; margin-top: 32px; border-bottom: 1px solid #F0F0F1">
+        <!-- Category tabs -->
+        <div style="display: flex; align-items: center; gap: 0; margin-top: 28px; border-bottom: 1px solid #F0F0F1; overflow-x: auto; scrollbar-width: none">
           <button
-            v-for="tab in filterTabs"
-            :key="tab.key"
+            v-for="cat in categoryTabs"
+            :key="cat.key"
             class="filter-tab"
-            :class="{ 'filter-tab--active': activeFilter === tab.key }"
-            @click="activeFilter = tab.key"
+            :class="{ 'filter-tab--active': activeCategory === cat.key }"
+            @click="activeCategory = cat.key; currentPage = 1"
           >
-            <span
-              v-if="tab.dot"
-              style="width: 6px; height: 6px; border-radius: 50%; display: inline-block; margin-right: 4px"
-              :style="{ background: tab.dot }"
-            />
-            {{ tab.label }}
-            <span style="margin-left: 2px; opacity: 0.6; font-variant-numeric: tabular-nums">{{ tab.count }}</span>
+            {{ cat.label }}
+            <span style="margin-left: 3px; opacity: 0.5; font-variant-numeric: tabular-nums">{{ cat.count }}</span>
           </button>
         </div>
 
-        <!-- Insight banners (only when "all") -->
-        <div
-          v-if="activeFilter === 'all'"
-          style="display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; margin-top: 20px"
-        >
-          <button
-            class="insight-card"
-            style="background: #FFFBEB; border: 1px solid #FDE68A"
-            @click="activeFilter = 'drifted'"
-          >
-            <div style="display: flex; align-items: center; gap: 6px">
-              <AlertTriangle :size="14" color="#D97706" />
-              <span style="font-size: 12px; font-weight: 600; color: #D97706">
-                {{ driftedCount }} outdated
-              </span>
-            </div>
-            <span style="font-size: 11px; color: #92400E; margin-top: 4px; display: block">
-              Components with Figma / code drift
-            </span>
-          </button>
-          <button
-            class="insight-card"
-            style="background: #FEF2F2; border: 1px solid #FECACA"
-            @click="activeFilter = 'missing'"
-          >
-            <div style="display: flex; align-items: center; gap: 6px">
-              <AlertTriangle :size="14" color="#DC2626" />
-              <span style="font-size: 12px; font-weight: 600; color: #DC2626">
-                {{ missingCount }} missing
-              </span>
-            </div>
-            <span style="font-size: 11px; color: #991B1B; margin-top: 4px; display: block">
-              In Figma but not yet implemented
-            </span>
-          </button>
+        <!-- Loading -->
+        <div v-if="loading" style="padding: 60px 0; text-align: center">
+          <RefreshCw :size="18" color="#A1A1AA" class="animate-spin" />
+          <p style="font-size: 13px; color: #A1A1AA; margin-top: 12px">Loading components...</p>
         </div>
 
-        <!-- GRID VIEW -->
-        <div
-          v-if="viewMode === 'grid'"
-          style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 20px; padding-bottom: 60px"
-        >
+        <!-- Empty state -->
+        <div v-else-if="filteredComponents.length === 0" style="padding: 60px 0; text-align: center">
+          <Package :size="28" color="#D4D4D8" style="margin: 0 auto" />
+          <p style="font-size: 13px; color: #A1A1AA; margin-top: 12px">
+            {{ searchQuery ? 'No components match your search' : 'No components synced yet' }}
+          </p>
+        </div>
+
+        <template v-else>
+          <!-- Results count -->
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 16px">
+            <span style="font-size: 12px; color: #A1A1AA">
+              Showing {{ pageStart + 1 }}&ndash;{{ Math.min(pageEnd, filteredComponents.length) }} of {{ filteredComponents.length }}
+            </span>
+          </div>
+
+          <!-- GRID VIEW -->
           <div
-            v-for="(comp, name) in filteredComponents"
-            :key="name"
-            class="comp-card"
-            @click="selectComponent(name as string)"
+            v-if="viewMode === 'grid'"
+            style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 12px"
           >
-            <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px">
-              <span style="font-size: 14px; font-weight: 600; color: #09090B">{{ name }}</span>
-              <span :class="['status-pill', 'status-pill--' + comp.status]">
-                <Check v-if="comp.status === 'synced'" :size="10" />
-                {{ statusLabel(comp.status) }}
-              </span>
-            </div>
-            <p style="font-size: 11px; color: #A1A1AA; margin: 8px 0 0; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%">
-              {{ comp.description }}
-            </p>
-            <div style="font-size: 11px; color: #A1A1AA; margin-top: 10px; font-variant-numeric: tabular-nums">
-              <span style="font-weight: 600">{{ comp.figmaVariants }}</span> Figma
-              <span style="margin: 0 4px; color: #E4E4E7">&middot;</span>
-              <span style="font-weight: 600">{{ comp.codeVariants }}</span> Code
+            <div
+              v-for="comp in paginatedComponents"
+              :key="comp.id"
+              class="comp-card"
+              @click="selectComponent(comp)"
+            >
+              <!-- Thumbnail -->
+              <div class="thumb-area">
+                <img
+                  v-if="thumbnails[comp.figma_node_id]"
+                  :src="thumbnails[comp.figma_node_id]"
+                  :alt="comp.name"
+                  class="thumb-img"
+                />
+                <div v-else class="thumb-placeholder">
+                  <Component :size="20" color="#D4D4D8" />
+                </div>
+              </div>
+              <!-- Info -->
+              <div style="padding: 12px 14px 14px">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px">
+                  <span style="font-size: 13px; font-weight: 600; color: #09090B; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{ comp.name }}</span>
+                  <span class="status-pill status-pill--missing">Missing</span>
+                </div>
+                <p v-if="comp.description" style="font-size: 11px; color: #A1A1AA; margin: 5px 0 0; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">
+                  {{ comp.description }}
+                </p>
+                <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px">
+                  <span v-if="comp.page_name" style="font-size: 10px; color: #71717A; background: #F4F4F5; padding: 2px 7px; border-radius: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 120px">
+                    {{ comp.page_name }}
+                  </span>
+                  <span style="font-size: 11px; color: #A1A1AA; font-variant-numeric: tabular-nums; margin-left: auto">
+                    {{ comp.variant_count }} variant{{ comp.variant_count > 1 ? 's' : '' }}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
 
-        <!-- LIST VIEW -->
-        <div
-          v-else
-          style="margin-top: 20px; padding-bottom: 60px; border: 1px solid #e4e4e7; border-radius: 10px; overflow: hidden"
-        >
+          <!-- LIST VIEW -->
           <div
-            v-for="(comp, name, i) in filteredComponents"
-            :key="name"
-            class="list-row"
-            :style="{ borderTop: i > 0 ? '1px solid #f4f4f5' : 'none' }"
-            @click="selectComponent(name as string)"
+            v-else
+            style="margin-top: 12px; border: 1px solid #e4e4e7; border-radius: 10px; overflow: hidden"
           >
-            <span style="font-size: 13px; font-weight: 600; color: #09090B; width: 100px; flex-shrink: 0">{{ name }}</span>
-            <span style="font-size: 12px; color: #A1A1AA; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{ comp.description }}</span>
-            <div style="display: flex; align-items: center; gap: 12px; flex-shrink: 0">
-              <span style="font-size: 11px; color: #a1a1aa; font-variant-numeric: tabular-nums">
-                <span style="font-weight: 600">{{ comp.figmaVariants }}</span> F
-                <span style="margin: 0 2px; color: #e4e4e7">/</span>
-                <span style="font-weight: 600">{{ comp.codeVariants }}</span> C
+            <div
+              v-for="(comp, i) in paginatedComponents"
+              :key="comp.id"
+              class="list-row"
+              :style="{ borderTop: i > 0 ? '1px solid #f4f4f5' : 'none' }"
+              @click="selectComponent(comp)"
+            >
+              <!-- Mini thumbnail -->
+              <div class="list-thumb">
+                <img
+                  v-if="thumbnails[comp.figma_node_id]"
+                  :src="thumbnails[comp.figma_node_id]"
+                  :alt="comp.name"
+                  style="width: 100%; height: 100%; object-fit: contain"
+                />
+                <Component v-else :size="12" color="#D4D4D8" />
+              </div>
+              <span style="font-size: 13px; font-weight: 600; color: #09090B; min-width: 140px; max-width: 200px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{ comp.name }}</span>
+              <span v-if="comp.page_name" style="font-size: 10px; color: #71717A; background: #F4F4F5; padding: 2px 7px; border-radius: 4px; flex-shrink: 0">
+                {{ comp.page_name }}
               </span>
-              <span :class="['status-pill', 'status-pill--' + comp.status]">
-                <Check v-if="comp.status === 'synced'" :size="10" />
-                {{ statusLabel(comp.status) }}
-              </span>
+              <span style="font-size: 12px; color: #A1A1AA; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{ comp.description }}</span>
+              <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0">
+                <span style="font-size: 11px; color: #a1a1aa; font-variant-numeric: tabular-nums">
+                  {{ comp.variant_count }}v
+                </span>
+                <span class="status-pill status-pill--missing">Missing</span>
+              </div>
             </div>
           </div>
-        </div>
+
+          <!-- Pagination -->
+          <div v-if="totalPages > 1" style="display: flex; align-items: center; justify-content: center; gap: 4px; margin-top: 24px; padding-bottom: 60px">
+            <button class="page-btn" :disabled="currentPage <= 1" @click="currentPage--">
+              <ChevronLeft :size="14" />
+            </button>
+            <template v-for="p in visiblePages" :key="p">
+              <span v-if="p === '...'" style="font-size: 12px; color: #A1A1AA; padding: 0 4px">&hellip;</span>
+              <button
+                v-else
+                class="page-btn"
+                :class="{ 'page-btn--active': currentPage === p }"
+                @click="currentPage = p as number"
+              >
+                {{ p }}
+              </button>
+            </template>
+            <button class="page-btn" :disabled="currentPage >= totalPages" @click="currentPage++">
+              <ChevronRight :size="14" />
+            </button>
+          </div>
+          <div v-else style="padding-bottom: 60px" />
+        </template>
       </template>
 
       <!-- DETAIL VIEW -->
       <template v-else>
-        <!-- Back button -->
-        <button class="back-btn" @click="selected = null">
+        <button class="back-btn" @click="selected = null; detailThumb = null">
           <ChevronLeft :size="12" />
           Components
         </button>
 
-        <!-- Header -->
-        <div style="padding-top: 8px">
+        <div style="padding-top: 8px; max-width: 680px">
           <div style="display: flex; align-items: center; gap: 10px">
             <h1 style="font-size: 24px; font-weight: 700; letter-spacing: -0.8px; color: #09090B; margin: 0">
-              {{ selected }}
+              {{ selected.name }}
             </h1>
-            <span :class="['detail-badge', 'detail-badge--' + selectedComp.status]">
-              {{ detailBadgeLabel }}
-            </span>
+            <span class="detail-badge detail-badge--missing">Not in code</span>
           </div>
-          <p style="font-size: 13px; color: #71717A; margin: 8px 0 0; max-width: 500px; line-height: 1.5">
-            {{ selectedComp.description }}
+
+          <p v-if="selected.description" style="font-size: 13px; color: #71717A; margin: 10px 0 0; line-height: 1.6">
+            {{ selected.description }}
           </p>
-          <div style="display: flex; gap: 16px; margin-top: 12px">
-            <span style="display: flex; align-items: center; gap: 3px; font-size: 11px; color: #A1A1AA">
-              <svg width="14" height="14" viewBox="0 0 38 57" fill="none" style="display: inline-block; vertical-align: -2px"><path d="M19 28.5a9.5 9.5 0 1 1 19 0 9.5 9.5 0 0 1-19 0z" fill="#1ABCFE"/><path d="M0 47.5A9.5 9.5 0 0 1 9.5 38H19v9.5a9.5 9.5 0 1 1-19 0z" fill="#0ACF83"/><path d="M19 0v19h9.5a9.5 9.5 0 1 0 0-19H19z" fill="#FF7262"/><path d="M0 9.5A9.5 9.5 0 0 0 9.5 19H19V0H9.5A9.5 9.5 0 0 0 0 9.5z" fill="#F24E1E"/><path d="M0 28.5A9.5 9.5 0 0 0 9.5 38H19V19H9.5A9.5 9.5 0 0 0 0 28.5z" fill="#A259FF"/></svg>
-              Figma: {{ selectedComp.figmaVariants }} variants &middot; {{ selectedComp.figmaDate }}
-            </span>
-            <span style="display: flex; align-items: center; gap: 3px; font-size: 11px; color: #A1A1AA">
-              <Code2 :size="11" />
-              Code: {{ selectedComp.codeVariants }} variants &middot; {{ selectedComp.codeDate }}
-            </span>
-          </div>
-        </div>
 
-        <!-- Detail tabs -->
-        <div style="display: flex; align-items: center; gap: 4px; margin-top: 40px; border-bottom: 1px solid #F0F0F1">
-          <button
-            v-for="tab in detailTabs"
-            :key="tab.key"
-            class="detail-tab"
-            :class="{ 'detail-tab--active': activeDetailTab === tab.key }"
-            @click="activeDetailTab = tab.key"
-          >
-            <component :is="tab.icon" :size="13" style="margin-right: 4px; vertical-align: -1px" />
-            {{ tab.label }}
-          </button>
-        </div>
-
-        <!-- Preview Tab -->
-        <div v-if="activeDetailTab === 'preview'" style="padding: 28px 0 0">
-          <!-- Button preview -->
-          <div v-if="selected === 'Button'" class="preview-container">
-            <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
-              <button class="prev-btn prev-btn--primary">Primary</button>
-              <button class="prev-btn prev-btn--secondary">Secondary</button>
-              <button class="prev-btn prev-btn--ghost">Ghost</button>
-              <button class="prev-btn prev-btn--danger">Danger</button>
-              <button class="prev-btn prev-btn--primary prev-btn--sm">Small</button>
-              <button class="prev-btn prev-btn--primary prev-btn--lg">Large</button>
-            </div>
-          </div>
-
-          <!-- Badge preview -->
-          <div v-else-if="selected === 'Badge'" class="preview-container">
-            <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
-              <span class="prev-badge prev-badge--default">Default</span>
-              <span class="prev-badge prev-badge--success">Success</span>
-              <span class="prev-badge prev-badge--warning">Warning</span>
-              <span class="prev-badge prev-badge--error">Error</span>
-              <span class="prev-badge prev-badge--brand">Brand</span>
-            </div>
-          </div>
-
-          <!-- Input preview -->
-          <div v-else-if="selected === 'Input'" class="preview-container">
-            <div style="display: flex; flex-direction: column; gap: 14px; max-width: 320px">
-              <div class="prev-input-group">
-                <label class="prev-input-label">Email</label>
-                <input class="prev-input" placeholder="you@company.com" />
-              </div>
-              <div class="prev-input-group">
-                <label class="prev-input-label">Name</label>
-                <input class="prev-input prev-input--error" value="J" />
-                <span style="font-size: 11px; color: #DC2626; margin-top: 4px">Minimum 2 characters</span>
-              </div>
-              <div class="prev-input-group">
-                <label class="prev-input-label" style="color: #A1A1AA">Disabled</label>
-                <input class="prev-input prev-input--disabled" placeholder="Read only" disabled />
-              </div>
-            </div>
-          </div>
-
-          <!-- Avatar preview -->
-          <div v-else-if="selected === 'Avatar'" class="preview-container">
-            <div style="display: flex; align-items: flex-end; gap: 12px">
-              <div class="prev-avatar" style="width: 32px; height: 32px; font-size: 11px">DS</div>
-              <div class="prev-avatar" style="width: 40px; height: 40px; font-size: 13px">DS</div>
-              <div class="prev-avatar" style="width: 48px; height: 48px; font-size: 14px">DS</div>
-              <div class="prev-avatar" style="width: 56px; height: 56px; font-size: 16px">DS</div>
-              <div style="width: 1px; height: 40px; background: #F0F0F1; margin: 0 8px" />
-              <div style="display: flex; margin-left: 0">
-                <div class="prev-avatar-stack" style="background: #2C2C2E; color: #FFF; z-index: 4">DS</div>
-                <div class="prev-avatar-stack" style="background: #7C3AED; color: #FFF; z-index: 3; margin-left: -10px">MK</div>
-                <div class="prev-avatar-stack" style="background: #0891B2; color: #FFF; z-index: 2; margin-left: -10px">JL</div>
-                <div class="prev-avatar-stack" style="background: #D97706; color: #FFF; z-index: 1; margin-left: -10px">+2</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Card preview -->
-          <div v-else-if="selected === 'Card'" class="preview-container">
-            <div style="display: flex; gap: 12px">
-              <div class="prev-card prev-card--default">
-                <div style="font-size: 13px; font-weight: 600; color: #09090B">Default</div>
-                <div style="font-size: 11px; color: #71717A; margin-top: 4px">With shadow</div>
-              </div>
-              <div class="prev-card prev-card--subtle">
-                <div style="font-size: 13px; font-weight: 600; color: #09090B">Subtle</div>
-                <div style="font-size: 11px; color: #71717A; margin-top: 4px">Flat, no shadow</div>
-              </div>
-              <div class="prev-card prev-card--highlighted">
-                <div style="font-size: 13px; font-weight: 600; color: #09090B">Highlighted</div>
-                <div style="font-size: 11px; color: #71717A; margin-top: 4px">Brand border</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Tooltip preview -->
-          <div v-else-if="selected === 'Tooltip'" class="preview-container">
-            <div style="padding-top: 40px; display: flex; justify-content: center">
-              <div style="position: relative; display: inline-block">
-                <div class="prev-tooltip">More information</div>
-                <button class="prev-btn prev-btn--ghost">Hover me</button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Tabs preview -->
-          <div v-else-if="selected === 'Tabs'" class="preview-container">
-            <div style="border-bottom: 1px solid #F0F0F1; display: flex; gap: 0">
+          <!-- Figma Preview -->
+          <div class="preview-area" style="margin-top: 24px">
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid #F0F0F1">
+              <span style="font-size: 11px; font-weight: 600; color: #71717A; text-transform: uppercase; letter-spacing: 0.5px">Figma Preview</span>
               <button
-                v-for="(t, i) in previewTabs"
-                :key="t"
-                class="prev-tab"
-                :class="{ 'prev-tab--active': previewActiveTab === i }"
-                @click="previewActiveTab = i"
+                v-if="!detailThumb && !detailThumbLoading"
+                class="load-preview-btn"
+                @click="loadDetailThumbnail"
               >
-                {{ t }}
+                <ImageIcon :size="12" />
+                Load preview
               </button>
+              <RefreshCw v-if="detailThumbLoading" :size="12" color="#A1A1AA" class="animate-spin" />
             </div>
-            <div style="padding: 20px 0; font-size: 13px; color: #71717A">
-              Content for "{{ previewTabs[previewActiveTab] }}" tab
-            </div>
-          </div>
-
-          <!-- Drift warning -->
-          <div
-            v-if="selectedComp.status === 'drifted'"
-            style="display: flex; align-items: flex-start; gap: 10px; margin-top: 24px; padding: 14px 16px; background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 10px"
-          >
-            <AlertTriangle :size="14" color="#D97706" style="flex-shrink: 0; margin-top: 1px" />
-            <div>
-              <div style="font-size: 12px; font-weight: 600; color: #D97706">Drift detected</div>
-              <div style="font-size: 11px; color: #92400E; margin-top: 2px; line-height: 1.5">
-                {{ selectedComp.behindDetail }}
+            <div style="min-height: 140px; display: flex; align-items: center; justify-content: center; background: #FAFAFA">
+              <img
+                v-if="detailThumb"
+                :src="detailThumb"
+                :alt="selected.name"
+                style="max-width: 100%; max-height: 320px; object-fit: contain; padding: 16px"
+              />
+              <div v-else-if="detailThumbLoading" style="padding: 40px; text-align: center">
+                <RefreshCw :size="16" color="#D4D4D8" class="animate-spin" />
+                <p style="font-size: 11px; color: #A1A1AA; margin-top: 8px">Loading preview...</p>
+              </div>
+              <div v-else style="padding: 40px; text-align: center">
+                <Component :size="28" color="#E4E4E7" />
+                <p style="font-size: 11px; color: #A1A1AA; margin-top: 8px">Click "Load preview" to fetch from Figma</p>
               </div>
             </div>
           </div>
 
-          <!-- Missing banner -->
-          <div
-            v-if="selectedComp.status === 'missing'"
-            style="display: flex; align-items: flex-start; gap: 10px; margin-top: 24px; padding: 14px 16px; background: #FEF2F2; border: 1px solid #FECACA; border-radius: 10px"
-          >
+          <!-- Meta info -->
+          <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 20px">
+            <div class="meta-chip">
+              <svg width="14" height="14" viewBox="0 0 38 57" fill="none"><path d="M19 28.5a9.5 9.5 0 1 1 19 0 9.5 9.5 0 0 1-19 0z" fill="#1ABCFE"/><path d="M0 47.5A9.5 9.5 0 0 1 9.5 38H19v9.5a9.5 9.5 0 1 1-19 0z" fill="#0ACF83"/><path d="M19 0v19h9.5a9.5 9.5 0 1 0 0-19H19z" fill="#FF7262"/><path d="M0 9.5A9.5 9.5 0 0 0 9.5 19H19V0H9.5A9.5 9.5 0 0 0 0 9.5z" fill="#F24E1E"/><path d="M0 28.5A9.5 9.5 0 0 0 9.5 38H19V19H9.5A9.5 9.5 0 0 0 0 28.5z" fill="#A259FF"/></svg>
+              {{ selected.variant_count }} variant{{ selected.variant_count > 1 ? 's' : '' }}
+            </div>
+            <div v-if="selected.page_name" class="meta-chip">
+              <Layers :size="12" />
+              {{ selected.page_name }}
+            </div>
+            <div v-if="selected.component_set_name" class="meta-chip">
+              <Component :size="12" />
+              {{ selected.component_set_name }}
+            </div>
+          </div>
+
+          <!-- Status banner -->
+          <div style="display: flex; align-items: flex-start; gap: 10px; margin-top: 24px; padding: 14px 16px; background: #FEF2F2; border: 1px solid #FECACA; border-radius: 10px">
             <AlertTriangle :size="14" color="#DC2626" style="flex-shrink: 0; margin-top: 1px" />
             <div>
               <div style="font-size: 12px; font-weight: 600; color: #DC2626">Missing in code</div>
               <div style="font-size: 11px; color: #991B1B; margin-top: 2px; line-height: 1.5">
-                {{ selectedComp.behindDetail }}
+                This component exists in Figma but has not been implemented in code yet.
               </div>
             </div>
           </div>
-        </div>
 
-        <!-- Code Tab -->
-        <div v-if="activeDetailTab === 'code'" style="padding: 28px 0 0">
-          <CodeBlock :code="selectedComp.code" language="vue" />
-        </div>
-
-        <!-- Usage Tab -->
-        <div v-if="activeDetailTab === 'usage'" style="padding: 28px 0 0">
-          <CodeBlock :code="selectedComp.usage" language="vue" />
-        </div>
-
-        <!-- Props Tab -->
-        <div v-if="activeDetailTab === 'props'" style="padding: 28px 0 0">
-          <div style="border: 1px solid #E4E4E7; border-radius: 8px; overflow: hidden">
-            <table style="width: 100%; border-collapse: collapse">
-              <thead>
-                <tr style="background: #FAFAFA">
-                  <th class="props-th">Prop</th>
-                  <th class="props-th">Type</th>
-                  <th class="props-th">Default</th>
-                  <th class="props-th">Required</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="prop in selectedComp.props"
-                  :key="prop.name"
-                  style="border-top: 1px solid #F0F0F1"
-                >
-                  <td class="props-td">
-                    <span style="font-family: monospace; font-size: 12px; font-weight: 600; color: #09090B">{{ prop.name }}</span>
-                  </td>
-                  <td class="props-td">
-                    <span style="font-family: monospace; font-size: 11px; color: #71717A">{{ prop.type }}</span>
-                  </td>
-                  <td class="props-td">
-                    <span style="font-family: monospace; font-size: 11px; color: #A1A1AA">{{ prop.default }}</span>
-                  </td>
-                  <td class="props-td">
-                    <span
-                      v-if="prop.required"
-                      style="font-size: 10px; font-weight: 500; color: #16A34A; background: #F0FDF4; border: 1px solid #BBF7D0; padding: 1px 6px; border-radius: 4px"
-                    >yes</span>
-                    <span v-else style="font-size: 11px; color: #D4D4D8">&mdash;</span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+          <!-- Actions -->
+          <div style="display: flex; align-items: center; gap: 8px; margin-top: 24px; padding-bottom: 60px">
+            <button class="action-btn action-btn--primary" @click="showLinearModal = true">
+              <CirclePlus :size="13" style="margin-right: 4px" />
+              Create Linear Issue
+            </button>
+            <button
+              class="action-btn action-btn--ghost"
+              @click="openInFigma"
+            >
+              <ExternalLink :size="13" style="margin-right: 4px" />
+              Open in Figma
+            </button>
           </div>
         </div>
 
-        <!-- Action buttons -->
-        <div style="display: flex; align-items: center; gap: 8px; margin-top: 40px; padding-bottom: 60px">
-          <button v-if="selectedComp.status !== 'synced'" class="action-btn action-btn--primary">
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="margin-right: 6px">
-              <path d="M8 1L14.9282 5.5V10.5L8 15L1.07179 10.5V5.5L8 1Z" stroke="currentColor" stroke-width="1.2" fill="none"/>
-            </svg>
-            Create Linear issue
-          </button>
-          <button class="action-btn action-btn--ghost">
-            <ExternalLink :size="13" style="margin-right: 4px" />
-            Figma
-          </button>
-          <button v-if="selectedComp.status !== 'missing'" class="action-btn action-btn--ghost">
-            <Code2 :size="13" style="margin-right: 4px" />
-            GitHub
-          </button>
+        <!-- Linear Issue Modal -->
+        <div v-if="showLinearModal" class="modal-overlay" @click.self="showLinearModal = false">
+          <div class="modal-card">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px">
+              <h3 style="font-size: 15px; font-weight: 600; color: #09090B; margin: 0">Create Linear Issue</h3>
+              <button style="background: none; border: none; cursor: pointer; color: #A1A1AA; padding: 4px" @click="showLinearModal = false">
+                <X :size="16" />
+              </button>
+            </div>
+            <div style="margin-bottom: 14px">
+              <label style="font-size: 12px; font-weight: 600; color: #09090B; display: block; margin-bottom: 6px">Title</label>
+              <input
+                v-model="linearTitle"
+                class="modal-input"
+                placeholder="Issue title..."
+              />
+            </div>
+            <div style="margin-bottom: 14px">
+              <label style="font-size: 12px; font-weight: 600; color: #09090B; display: block; margin-bottom: 6px">Priority</label>
+              <div style="display: flex; gap: 6px">
+                <button
+                  v-for="p in ['high', 'medium', 'low']"
+                  :key="p"
+                  class="priority-btn"
+                  :class="{ 'priority-btn--active': linearPriority === p, [`priority-btn--${p}`]: linearPriority === p }"
+                  @click="linearPriority = p"
+                >
+                  {{ p }}
+                </button>
+              </div>
+            </div>
+            <div style="margin-bottom: 20px">
+              <label style="font-size: 12px; font-weight: 600; color: #09090B; display: block; margin-bottom: 6px">Description</label>
+              <textarea
+                v-model="linearDesc"
+                class="modal-input"
+                rows="3"
+                placeholder="Additional details..."
+                style="resize: vertical; min-height: 60px"
+              />
+            </div>
+            <div style="display: flex; justify-content: flex-end; gap: 8px">
+              <button class="action-btn action-btn--ghost" @click="showLinearModal = false">Cancel</button>
+              <button class="action-btn action-btn--primary" @click="createLinearIssue">
+                <CirclePlus :size="13" style="margin-right: 4px" />
+                Create
+              </button>
+            </div>
+          </div>
         </div>
       </template>
     </div>
@@ -405,344 +328,331 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import {
+  Search,
   AlertTriangle,
   ChevronLeft,
-  Eye,
-  Code2,
-  Play,
+  ChevronRight,
   List,
   LayoutGrid,
   ExternalLink,
-  Check,
+  RefreshCw,
+  Package,
+  Layers,
+  Component,
+  CirclePlus,
+  X,
+  Image as ImageIcon,
 } from 'lucide-vue-next'
-import type { LibraryComponent } from '~/types'
+import type { FigmaComponent } from '~/types'
 
-const { libraryData } = useMockData()
+// Data
+const { connection, fetchStatus } = useFigmaConnection()
+const { components, loading, fetchComponents } = useFigmaComponents()
 
-const selected = ref<string | null>(null)
-const activeFilter = ref<string>('all')
-const activeDetailTab = ref<string>('preview')
-const viewMode = ref<'grid' | 'list'>('grid')
-const previewActiveTab = ref(0)
-const previewTabs = ['Overview', 'Settings', 'Activity']
-
-const componentCount = computed(() => Object.keys(libraryData).length)
-const componentEntries = computed(() => Object.entries(libraryData))
-
-const driftedCount = computed(() =>
-  componentEntries.value.filter(([, c]) => c.status === 'drifted').length,
-)
-const missingCount = computed(() =>
-  componentEntries.value.filter(([, c]) => c.status === 'missing').length,
-)
-const syncedCount = computed(() =>
-  componentEntries.value.filter(([, c]) => c.status === 'synced').length,
-)
-
-const filterTabs = computed(() => [
-  { key: 'all', label: 'All', count: componentCount.value, dot: null },
-  { key: 'drifted', label: 'Outdated', count: driftedCount.value, dot: '#D97706' },
-  { key: 'missing', label: 'Missing', count: missingCount.value, dot: '#DC2626' },
-  { key: 'synced', label: 'Up to date', count: syncedCount.value, dot: '#16A34A' },
-])
-
-const filteredComponents = computed(() => {
-  const entries = componentEntries.value
-  if (activeFilter.value === 'all') return Object.fromEntries(entries)
-  return Object.fromEntries(
-    entries.filter(([, c]) => c.status === activeFilter.value),
-  )
-})
-
-const selectedComp = computed<LibraryComponent>(() => {
-  return libraryData[selected.value!]
-})
-
-const detailBadgeLabel = computed(() => {
-  if (selectedComp.value.status === 'synced') return 'Up to date'
-  if (selectedComp.value.status === 'drifted') {
-    return selectedComp.value.behind === 'code' ? 'Code outdated' : 'Figma outdated'
+// Fetch on mount
+onMounted(async () => {
+  await fetchStatus()
+  if (connection.value.connected) {
+    await fetchComponents()
   }
-  return 'Not in code'
 })
 
-const detailTabs = computed(() => [
-  { key: 'preview', label: 'Preview', icon: Eye },
-  { key: 'code', label: 'Code', icon: Code2 },
-  { key: 'usage', label: 'Usage', icon: Play },
-  { key: 'props', label: 'Props', icon: List },
-])
+// State
+const selected = ref<FigmaComponent | null>(null)
+const searchQuery = ref('')
+const activeCategory = ref('all')
+const viewMode = ref<'grid' | 'list'>('grid')
+const currentPage = ref(1)
+const PER_PAGE = 60
 
-function selectComponent(name: string) {
-  selected.value = name
-  activeDetailTab.value = 'preview'
-  previewActiveTab.value = 0
+// Thumbnails cache
+const thumbnails = ref<Record<string, string>>({})
+const thumbsLoading = ref(false)
+
+// Detail view thumbnail
+const detailThumb = ref<string | null>(null)
+const detailThumbLoading = ref(false)
+
+// Linear modal
+const showLinearModal = ref(false)
+const linearTitle = ref('')
+const linearPriority = ref('medium')
+const linearDesc = ref('')
+
+// Categories from page_name
+const categories = computed(() => {
+  const cats = new Map<string, number>()
+  for (const comp of components.value) {
+    const page = comp.page_name || 'Uncategorized'
+    cats.set(page, (cats.get(page) || 0) + 1)
+  }
+  return Array.from(cats.entries()).sort((a, b) => b[1] - a[1])
+})
+
+const categoryTabs = computed(() => {
+  const tabs = [{ key: 'all', label: 'All', count: components.value.length }]
+  for (const [name, count] of categories.value) {
+    tabs.push({ key: name, label: name, count })
+  }
+  return tabs
+})
+
+const totalCount = computed(() => components.value.length)
+
+// Filter by category + search
+const filteredComponents = computed(() => {
+  let filtered = components.value
+
+  if (activeCategory.value !== 'all') {
+    filtered = filtered.filter(c => (c.page_name || 'Uncategorized') === activeCategory.value)
+  }
+
+  if (searchQuery.value.trim()) {
+    const q = searchQuery.value.toLowerCase()
+    filtered = filtered.filter(c =>
+      c.name.toLowerCase().includes(q)
+      || (c.description && c.description.toLowerCase().includes(q))
+      || (c.page_name && c.page_name.toLowerCase().includes(q)),
+    )
+  }
+
+  return filtered
+})
+
+// Pagination
+const totalPages = computed(() => Math.ceil(filteredComponents.value.length / PER_PAGE))
+const pageStart = computed(() => (currentPage.value - 1) * PER_PAGE)
+const pageEnd = computed(() => pageStart.value + PER_PAGE)
+const paginatedComponents = computed(() => filteredComponents.value.slice(pageStart.value, pageEnd.value))
+
+watch([searchQuery, activeCategory], () => {
+  currentPage.value = 1
+})
+
+// Visible page numbers
+const visiblePages = computed(() => {
+  const total = totalPages.value
+  const cur = currentPage.value
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
+  const pages: (number | string)[] = [1]
+  if (cur > 3) pages.push('...')
+  for (let i = Math.max(2, cur - 1); i <= Math.min(total - 1, cur + 1); i++) {
+    pages.push(i)
+  }
+  if (cur < total - 2) pages.push('...')
+  pages.push(total)
+  return pages
+})
+
+// Load thumbnails for currently visible components
+async function loadThumbnails(comps: FigmaComponent[]) {
+  // Filter to components we don't have thumbnails for yet
+  const needed = comps
+    .map(c => c.figma_node_id)
+    .filter(id => id && !thumbnails.value[id])
+
+  if (!needed.length) return
+
+  thumbsLoading.value = true
+  try {
+    const { images } = await $fetch<{ images: Record<string, string> }>('/api/figma/thumbnails', {
+      method: 'POST',
+      body: { nodeIds: needed.slice(0, 50) },
+    })
+    // Merge into cache
+    thumbnails.value = { ...thumbnails.value, ...images }
+  } catch {
+    // Silently fail — thumbnails are optional
+  } finally {
+    thumbsLoading.value = false
+  }
 }
 
-function statusLabel(status: string) {
-  if (status === 'synced') return 'Up to date'
-  if (status === 'drifted') return 'Outdated'
-  return 'Missing'
+// Watch paginated components to load thumbnails
+watch(paginatedComponents, (comps) => {
+  if (comps.length > 0) {
+    loadThumbnails(comps)
+  }
+}, { immediate: true })
+
+// Detail view
+function selectComponent(comp: FigmaComponent) {
+  selected.value = comp
+  detailThumb.value = thumbnails.value[comp.figma_node_id] || null
+  // Pre-fill Linear issue title
+  linearTitle.value = `Implement ${comp.name} component`
+  linearDesc.value = comp.description
+    ? `Figma component "${comp.name}" needs to be implemented in code.\n\nDescription: ${comp.description}`
+    : `Figma component "${comp.name}" needs to be implemented in code.`
+  linearPriority.value = 'medium'
+
+  // Auto-load thumbnail if we don't have it
+  if (!detailThumb.value && comp.figma_node_id) {
+    loadDetailThumbnail()
+  }
+}
+
+async function loadDetailThumbnail() {
+  if (!selected.value?.figma_node_id) return
+  detailThumbLoading.value = true
+  try {
+    const { images } = await $fetch<{ images: Record<string, string> }>('/api/figma/thumbnails', {
+      method: 'POST',
+      body: { nodeIds: [selected.value.figma_node_id] },
+    })
+    const url = images[selected.value.figma_node_id]
+    if (url) {
+      detailThumb.value = url
+      // Also cache it
+      thumbnails.value = { ...thumbnails.value, [selected.value.figma_node_id]: url }
+    }
+  } catch {
+    // Silently fail
+  } finally {
+    detailThumbLoading.value = false
+  }
+}
+
+function openInFigma() {
+  if (!selected.value || !connection.value.fileKey) return
+  const nodeId = selected.value.figma_node_id.replace(':', '-')
+  const url = `https://www.figma.com/design/${connection.value.fileKey}?node-id=${nodeId}`
+  window.open(url, '_blank')
+}
+
+function createLinearIssue() {
+  // For now, copy to clipboard and close modal (Linear API integration coming)
+  const text = `[${linearPriority.value.toUpperCase()}] ${linearTitle.value}\n\n${linearDesc.value}`
+  navigator.clipboard.writeText(text).catch(() => {})
+  showLinearModal.value = false
 }
 </script>
 
 <style scoped>
-/* View toggle */
-.view-toggle {
-  width: 30px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: none;
-  color: #71717a;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 120ms ease;
-}
-.view-toggle:hover { color: #3f3f46; }
-.view-toggle--active {
-  background: white;
-  color: #1a1a1a;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.06);
-}
-
-/* Filter tabs */
-.filter-tab {
-  padding: 10px 14px;
-  font-size: 13px;
-  font-weight: 450;
-  color: #71717A;
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  cursor: pointer;
-  transition: all 120ms ease;
-  display: inline-flex;
-  align-items: center;
-}
-.filter-tab:hover { color: #3F3F46; }
-.filter-tab--active {
-  font-weight: 600;
-  color: #09090B;
-  border-bottom-color: #2C2C2E;
-}
-
-/* Insight cards */
-.insight-card {
-  padding: 14px 16px;
-  border-radius: 10px;
-  cursor: pointer;
-  text-align: left;
-  transition: all 120ms ease;
-}
-.insight-card:hover { opacity: 0.85; }
-
-/* Component cards (grid) */
-.comp-card {
-  border: 1px solid #E4E4E7;
-  border-radius: 10px;
-  padding: 16px;
-  cursor: pointer;
-  transition: all 120ms ease;
-  background: #FFFFFF;
-}
-.comp-card:hover {
-  border-color: #2C2C2E;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-}
-
-/* List rows */
-.list-row {
-  display: flex;
-  align-items: center;
-  padding: 0 20px;
-  gap: 12px;
-  height: 48px;
-  cursor: pointer;
-  transition: background 100ms ease;
-}
-.list-row:hover { background: #fafafa; }
-
-/* Status pills */
-.status-pill {
-  font-size: 10px;
-  font-weight: 500;
-  padding: 2px 7px;
-  border-radius: 20px;
-  border: 1px solid;
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-.status-pill--synced { background: #F0FDF4; color: #16A34A; border-color: #BBF7D0; }
-.status-pill--drifted { background: #FFFBEB; color: #D97706; border-color: #FDE68A; }
-.status-pill--missing { background: #FEF2F2; color: #DC2626; border-color: #FECACA; }
-
-/* Detail badge */
-.detail-badge {
-  font-size: 11px;
-  font-weight: 500;
-  padding: 3px 10px;
-  border-radius: 20px;
-  border: 1px solid;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  white-space: nowrap;
-}
-.detail-badge--synced { background: #F0FDF4; color: #16A34A; border-color: #BBF7D0; }
-.detail-badge--drifted { background: #FFFBEB; color: #D97706; border-color: #FDE68A; }
-.detail-badge--missing { background: #FEF2F2; color: #DC2626; border-color: #FECACA; }
-
-/* Back button */
-.back-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 12px;
-  color: #71717A;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 24px 0 8px;
-  transition: color 120ms ease;
-  font-family: inherit;
-}
-.back-btn:hover { color: #09090B; }
-
-/* Detail tabs */
-.detail-tab {
-  padding: 10px 14px;
-  font-size: 13px;
-  font-weight: 450;
-  color: #71717A;
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  cursor: pointer;
-  transition: all 120ms ease;
-  display: inline-flex;
-  align-items: center;
-  font-family: inherit;
-}
-.detail-tab:hover { color: #3F3F46; }
-.detail-tab--active {
-  font-weight: 600;
-  color: #09090B;
-  border-bottom-color: #2C2C2E;
-}
-
-/* Preview container */
-.preview-container {
-  border: 1px dashed #E4E4E7;
-  border-radius: 10px;
-  padding: 28px 24px;
-  background: #FAFAFA;
-}
-
-/* Preview: Buttons */
-.prev-btn {
-  padding: 8px 16px;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 120ms ease;
-  display: inline-flex;
-  align-items: center;
-  border: none;
-  font-family: inherit;
-}
-.prev-btn--primary { background: #2C2C2E; color: #FFF; }
-.prev-btn--primary:hover { background: #1C1C1E; }
-.prev-btn--secondary { background: #F4F4F5; color: #3F3F46; border: 1px solid #E4E4E7; }
-.prev-btn--ghost { background: transparent; color: #3F3F46; border: 1px solid #E4E4E7; }
-.prev-btn--ghost:hover { border-color: #D4D4D8; background: #FAFAFA; }
-.prev-btn--danger { background: #DC2626; color: #FFF; }
-.prev-btn--danger:hover { background: #B91C1C; }
-.prev-btn--sm { padding: 5px 10px; font-size: 11px; }
-.prev-btn--lg { padding: 12px 24px; font-size: 15px; }
-
-/* Preview: Badges */
-.prev-badge { font-size: 11px; font-weight: 500; padding: 3px 9px; border-radius: 6px; display: inline-block; }
-.prev-badge--default { background: #F4F4F5; color: #71717A; }
-.prev-badge--success { background: #F0FDF4; color: #16A34A; }
-.prev-badge--warning { background: #FFFBEB; color: #D97706; }
-.prev-badge--error { background: #FEF2F2; color: #DC2626; }
-.prev-badge--brand { background: #F5F5F5; color: #2C2C2E; border: 1px solid #D4D4D4; }
-
-/* Preview: Inputs */
-.prev-input-group { display: flex; flex-direction: column; }
-.prev-input-label { font-size: 12px; font-weight: 500; color: #3F3F46; margin-bottom: 5px; }
-.prev-input {
-  padding: 8px 12px;
+/* Search */
+.search-input {
+  padding: 7px 10px 7px 30px;
   border: 1px solid #E4E4E7;
   border-radius: 8px;
   font-size: 13px;
   color: #09090B;
   background: #FFF;
   outline: none;
+  width: 220px;
   transition: border-color 120ms ease;
   font-family: inherit;
 }
-.prev-input:focus { border-color: #2C2C2E; }
-.prev-input--error { border-color: #DC2626; }
-.prev-input--error:focus { border-color: #DC2626; }
-.prev-input--disabled { background: #F4F4F5; color: #A1A1AA; cursor: not-allowed; }
+.search-input:focus { border-color: #2C2C2E; }
+.search-input::placeholder { color: #D4D4D8; }
 
-/* Preview: Avatar */
-.prev-avatar {
-  border-radius: 50%;
-  background: #2C2C2E;
-  color: #FFF;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 600;
+/* View toggle */
+.view-toggle {
+  width: 30px; height: 28px; display: flex; align-items: center; justify-content: center;
+  border: none; background: none; color: #71717a; border-radius: 6px; cursor: pointer;
+  transition: all 120ms ease;
 }
-.prev-avatar-stack {
-  width: 32px; height: 32px;
-  border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 10px; font-weight: 600;
-  border: 2px solid #FAFAFA;
-}
+.view-toggle:hover { color: #3f3f46; }
+.view-toggle--active { background: white; color: #1a1a1a; box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
 
-/* Preview: Cards */
-.prev-card { flex: 1; padding: 16px; border-radius: 10px; background: #FFF; }
-.prev-card--default { border: 1px solid #E4E4E7; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04); }
-.prev-card--subtle { border: 1px solid #F0F0F1; background: #FAFAFA; }
-.prev-card--highlighted { border: 2px solid #2C2C2E; }
-
-/* Preview: Tooltip */
-.prev-tooltip {
-  position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
-  margin-bottom: 8px; background: #2C2C2E; color: #FFF;
-  font-size: 11px; font-weight: 500; padding: 5px 10px; border-radius: 6px; white-space: nowrap;
-}
-.prev-tooltip::after {
-  content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
-  border: 5px solid transparent; border-top-color: #2C2C2E;
-}
-
-/* Preview: Tabs */
-.prev-tab {
-  padding: 10px 16px; font-size: 13px; font-weight: 450; color: #71717A;
+/* Filter tabs */
+.filter-tab {
+  padding: 10px 14px; font-size: 12px; font-weight: 450; color: #71717A;
   background: none; border: none; border-bottom: 2px solid transparent;
+  cursor: pointer; transition: all 120ms ease; display: inline-flex; align-items: center;
+  white-space: nowrap; flex-shrink: 0; font-family: inherit;
+}
+.filter-tab:hover { color: #3F3F46; }
+.filter-tab--active { font-weight: 600; color: #09090B; border-bottom-color: #2C2C2E; }
+
+/* Component cards */
+.comp-card {
+  border: 1px solid #E4E4E7; border-radius: 10px; overflow: hidden;
+  cursor: pointer; transition: all 120ms ease; background: #FFFFFF;
+}
+.comp-card:hover { border-color: #2C2C2E; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04); }
+
+/* Thumbnails */
+.thumb-area {
+  height: 110px; background: #FAFAFA; border-bottom: 1px solid #F0F0F1;
+  display: flex; align-items: center; justify-content: center; overflow: hidden;
+}
+.thumb-img {
+  max-width: 100%; max-height: 100%; object-fit: contain; padding: 10px;
+}
+.thumb-placeholder {
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* List rows */
+.list-row {
+  display: flex; align-items: center; padding: 0 16px; gap: 10px; height: 48px;
+  cursor: pointer; transition: background 100ms ease;
+}
+.list-row:hover { background: #fafafa; }
+
+.list-thumb {
+  width: 32px; height: 32px; border-radius: 6px; background: #FAFAFA; border: 1px solid #F0F0F1;
+  display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0;
+}
+
+/* Status pills */
+.status-pill {
+  font-size: 10px; font-weight: 500; padding: 2px 7px; border-radius: 20px;
+  border: 1px solid; display: inline-flex; align-items: center; gap: 3px;
+  white-space: nowrap; flex-shrink: 0;
+}
+.status-pill--synced { background: #F0FDF4; color: #16A34A; border-color: #BBF7D0; }
+.status-pill--drifted { background: #FFFBEB; color: #D97706; border-color: #FDE68A; }
+.status-pill--missing { background: #FEF2F2; color: #DC2626; border-color: #FECACA; }
+
+/* Pagination */
+.page-btn {
+  width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+  border: 1px solid #E4E4E7; border-radius: 8px; background: #FFF; color: #3F3F46;
+  font-size: 12px; font-weight: 500; cursor: pointer; transition: all 120ms ease; font-family: inherit;
+}
+.page-btn:hover:not(:disabled) { border-color: #2C2C2E; background: #FAFAFA; }
+.page-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.page-btn--active { background: #1a1a1a; color: #FFF; border-color: #1a1a1a; }
+
+/* Detail badge */
+.detail-badge {
+  font-size: 11px; font-weight: 500; padding: 3px 10px; border-radius: 20px;
+  border: 1px solid; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
+}
+.detail-badge--synced { background: #F0FDF4; color: #16A34A; border-color: #BBF7D0; }
+.detail-badge--drifted { background: #FFFBEB; color: #D97706; border-color: #FDE68A; }
+.detail-badge--missing { background: #FEF2F2; color: #DC2626; border-color: #FECACA; }
+
+/* Meta chips */
+.meta-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; color: #71717A; background: #F4F4F5;
+  padding: 5px 10px; border-radius: 6px;
+}
+
+/* Preview area */
+.preview-area {
+  border: 1px solid #E4E4E7; border-radius: 10px; overflow: hidden;
+}
+
+.load-preview-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; font-weight: 500; color: #71717A; background: none;
+  border: 1px solid #E4E4E7; border-radius: 6px; padding: 4px 10px;
   cursor: pointer; transition: all 120ms ease; font-family: inherit;
 }
-.prev-tab:hover { color: #3F3F46; }
-.prev-tab--active { font-weight: 600; color: #09090B; border-bottom-color: #2C2C2E; }
+.load-preview-btn:hover { color: #09090B; border-color: #D4D4D8; }
 
-/* Props table */
-.props-th { text-align: left; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #A1A1AA; padding: 10px 16px; }
-.props-td { padding: 10px 16px; vertical-align: top; }
+/* Back button */
+.back-btn {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 12px; color: #71717A; background: none; border: none;
+  cursor: pointer; padding: 24px 0 8px; transition: color 120ms ease; font-family: inherit;
+}
+.back-btn:hover { color: #09090B; }
 
 /* Action buttons */
 .action-btn {
@@ -754,4 +664,36 @@ function statusLabel(status: string) {
 .action-btn--primary:hover { background: #1C1C1E; }
 .action-btn--ghost { background: transparent; color: #3F3F46; border: 1px solid #E4E4E7; }
 .action-btn--ghost:hover { border-color: #D4D4D8; background: #FAFAFA; }
+
+/* Modal */
+.modal-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.3); backdrop-filter: blur(2px);
+  display: flex; align-items: center; justify-content: center; z-index: 100;
+}
+.modal-card {
+  background: #FFF; border-radius: 14px; padding: 24px; width: 440px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.12);
+}
+.modal-input {
+  width: 100%; padding: 9px 12px; border: 1px solid #E4E4E7; border-radius: 8px;
+  font-size: 13px; color: #09090B; outline: none; background: #FFF;
+  transition: border-color 120ms ease; font-family: inherit; box-sizing: border-box;
+}
+.modal-input:focus { border-color: #2C2C2E; }
+
+/* Priority buttons */
+.priority-btn {
+  padding: 5px 14px; border: 1px solid #E4E4E7; border-radius: 6px;
+  font-size: 12px; font-weight: 500; color: #71717A; background: #FFF;
+  cursor: pointer; transition: all 120ms ease; text-transform: capitalize; font-family: inherit;
+}
+.priority-btn:hover { border-color: #D4D4D8; }
+.priority-btn--active.priority-btn--high { background: #FEF2F2; color: #DC2626; border-color: #FECACA; }
+.priority-btn--active.priority-btn--medium { background: #FFFBEB; color: #D97706; border-color: #FDE68A; }
+.priority-btn--active.priority-btn--low { background: #F0FDF4; color: #16A34A; border-color: #BBF7D0; }
+
+/* Animations */
+.animate-spin { animation: spin 1s linear infinite; }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 </style>

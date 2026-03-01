@@ -30,9 +30,61 @@
         </button>
       </div>
 
-      <!-- Insight banners (only when "All") -->
+      <!-- Insight banners (only when "All" and has diff data) -->
       <div
-        v-if="activeCategory === 'all' && driftedCount > 0"
+        v-if="activeCategory === 'all' && hasDiff"
+        class="grid gap-[8px]"
+        style="grid-template-columns: 1fr 1fr 1fr; margin-top: 20px"
+      >
+        <button
+          class="insight-card"
+          style="background: #F0FDF4; border: 1px solid #BBF7D0"
+          @click="activeStatus = activeStatus === 'synced' ? 'all' : 'synced'"
+        >
+          <div class="flex items-center gap-[6px]">
+            <Check :size="14" color="#16A34A" />
+            <span style="font-size: 12px; font-weight: 600; color: #16A34A">
+              {{ syncedCount }} synced
+            </span>
+          </div>
+          <span style="font-size: 11px; color: #166534; margin-top: 4px; display: block">
+            Values match between Figma and code
+          </span>
+        </button>
+        <button
+          class="insight-card"
+          style="background: #FFFBEB; border: 1px solid #FDE68A"
+          @click="activeStatus = activeStatus === 'drifted' ? 'all' : 'drifted'"
+        >
+          <div class="flex items-center gap-[6px]">
+            <AlertTriangle :size="14" color="#D97706" />
+            <span style="font-size: 12px; font-weight: 600; color: #D97706">
+              {{ driftedCount }} drifted
+            </span>
+          </div>
+          <span style="font-size: 11px; color: #92400E; margin-top: 4px; display: block">
+            Tokens with Figma / code mismatch
+          </span>
+        </button>
+        <button
+          class="insight-card"
+          style="background: #FEF2F2; border: 1px solid #FECACA"
+          @click="activeStatus = activeStatus === 'missing' ? 'all' : 'missing'"
+        >
+          <div class="flex items-center gap-[6px]">
+            <AlertTriangle :size="14" color="#DC2626" />
+            <span style="font-size: 12px; font-weight: 600; color: #DC2626">
+              {{ missingCount }} missing
+            </span>
+          </div>
+          <span style="font-size: 11px; color: #991B1B; margin-top: 4px; display: block">
+            Tokens only in Figma or only in code
+          </span>
+        </button>
+      </div>
+      <!-- Old insight banners for mock/Figma-only mode -->
+      <div
+        v-else-if="activeCategory === 'all' && driftedCount > 0"
         class="grid gap-[8px]"
         style="grid-template-columns: 1fr 1fr; margin-top: 20px"
       >
@@ -84,9 +136,9 @@
         <button class="active-filter-pill" @click="activeStatus = 'all'">
           <span
             style="width: 6px; height: 6px; border-radius: 50%; display: inline-block"
-            :style="{ background: activeStatus === 'synced' ? '#16A34A' : '#D97706' }"
+            :style="{ background: activeStatus === 'synced' ? '#16A34A' : activeStatus === 'drifted' ? '#D97706' : '#DC2626' }"
           />
-          {{ activeStatus === 'synced' ? 'Synced' : 'Drifted' }}
+          {{ activeStatus === 'synced' ? 'Synced' : activeStatus === 'drifted' ? 'Drifted' : 'Missing' }}
           <span style="margin-left: 2px; color: #A1A1AA">&times;</span>
         </button>
       </div>
@@ -98,7 +150,7 @@
           <span class="th" style="flex: 1">Token</span>
           <span class="th" style="width: 140px">Figma</span>
           <span class="th" style="width: 140px">Code</span>
-          <span class="th" style="width: 80px; text-align: right">Status</span>
+          <span class="th" style="width: 100px; text-align: right">Status</span>
         </div>
 
         <!-- Rows -->
@@ -109,9 +161,9 @@
         >
           <div style="flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0">
             <span
-              v-if="token.figma !== token.code"
+              v-if="token.status !== 'synced'"
               style="width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0"
-              :style="{ background: token.severity === 'high' ? '#DC2626' : token.severity === 'medium' ? '#D97706' : '#A1A1AA' }"
+              :style="{ background: token.status === 'missing_in_code' || token.severity === 'high' ? '#DC2626' : token.status === 'drifted' || token.severity === 'medium' ? '#D97706' : token.status === 'missing_in_figma' ? '#2563EB' : '#A1A1AA' }"
             />
             <span style="font-family: 'SF Mono', monospace; font-size: 12px; font-weight: 500; color: #09090B; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">
               {{ token.name }}
@@ -133,20 +185,34 @@
             />
             {{ token.code }}
           </span>
-          <div style="width: 80px; text-align: right">
+          <div style="width: 100px; text-align: right">
             <span
-              v-if="token.figma === token.code"
+              v-if="token.status === 'synced'"
               class="status-pill"
               style="background: #F0FDF4; color: #16A34A; border-color: #BBF7D0"
             >
               Synced
             </span>
             <span
-              v-else
+              v-else-if="token.status === 'drifted'"
               class="status-pill"
               style="background: #FFFBEB; color: #D97706; border-color: #FDE68A"
             >
               Drifted
+            </span>
+            <span
+              v-else-if="token.status === 'missing_in_code'"
+              class="status-pill"
+              style="background: #FEF2F2; color: #DC2626; border-color: #FECACA"
+            >
+              No code
+            </span>
+            <span
+              v-else-if="token.status === 'missing_in_figma'"
+              class="status-pill"
+              style="background: #EFF6FF; color: #2563EB; border-color: #BFDBFE"
+            >
+              No Figma
             </span>
           </div>
         </div>
@@ -161,11 +227,15 @@
       <div class="flex gap-[16px]" style="margin-top: 16px; padding-bottom: 60px">
         <span style="font-size: 12px; color: #16A34A; display: flex; align-items: center; gap: 4px">
           <span style="width: 6px; height: 6px; border-radius: 50%; background: #16A34A; display: inline-block" />
-          {{ filteredTokens.filter(t => t.figma === t.code).length }} synced
+          {{ filteredTokens.filter(t => t.status === 'synced').length }} synced
         </span>
         <span style="font-size: 12px; color: #D97706; display: flex; align-items: center; gap: 4px">
           <span style="width: 6px; height: 6px; border-radius: 50%; background: #D97706; display: inline-block" />
-          {{ filteredTokens.filter(t => t.figma !== t.code).length }} drifted
+          {{ filteredTokens.filter(t => t.status === 'drifted').length }} drifted
+        </span>
+        <span v-if="hasDiff" style="font-size: 12px; color: #DC2626; display: flex; align-items: center; gap: 4px">
+          <span style="width: 6px; height: 6px; border-radius: 50%; background: #DC2626; display: inline-block" />
+          {{ filteredTokens.filter(t => t.status === 'missing_in_code' || t.status === 'missing_in_figma').length }} missing
         </span>
       </div>
     </div>
@@ -173,37 +243,108 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { Search, AlertTriangle, Check } from 'lucide-vue-next'
 
-const { tokens, categories } = useMockData()
+// Real data sources
+const { connection: figmaConn, fetchStatus: fetchFigmaStatus } = useFigmaConnection()
+const { connection: ghConn, fetchStatus: fetchGhStatus } = useGitHubConnection()
+const figmaTokens = useFigmaTokens()
+const { diffs: diffResults, summary: diffSummary, fetchResults: fetchDiffResults } = useTokenDiff()
+
+// Mock data as fallback
+const mock = useMockData()
+
+// Fetch real data on mount
+onMounted(async () => {
+  await Promise.all([fetchFigmaStatus(), fetchGhStatus()])
+  if (figmaConn.value.connected) {
+    await figmaTokens.fetchTokens()
+  }
+  // Load diff results if both connected
+  if (figmaConn.value.connected && ghConn.value.connected) {
+    await fetchDiffResults()
+  }
+})
+
+// Data mode: diff > figma-only > mock
+const hasDiff = computed(() => diffResults.value.length > 0)
+const isFigmaOnly = computed(() => figmaConn.value.connected && figmaTokens.tokens.value.length > 0 && !hasDiff.value)
+
+const tokens = computed(() => {
+  if (hasDiff.value) {
+    return diffResults.value.map(d => ({
+      name: d.tokenName,
+      figma: d.figmaValue || '—',
+      code: d.codeValue || '—',
+      category: d.category,
+      severity: d.severity || ('low' as const),
+      status: d.status,
+    }))
+  }
+  if (isFigmaOnly.value) {
+    return figmaTokens.tokens.value.map(t => ({
+      name: t.name,
+      figma: t.figma_value,
+      code: '—',
+      category: t.category,
+      severity: 'low' as const,
+      status: 'synced' as const,
+    }))
+  }
+  return mock.tokens.map(t => ({
+    ...t,
+    status: t.figma === t.code ? 'synced' : 'drifted',
+  }))
+})
+
+const categories = computed(() => {
+  if (hasDiff.value) {
+    const catSet = new Set(diffResults.value.map(d => d.category))
+    return Array.from(catSet).map(name => ({
+      name,
+      icon: '',
+      count: diffResults.value.filter(d => d.category === name).length,
+      synced: diffResults.value.filter(d => d.category === name && d.status === 'synced').length,
+      drifted: diffResults.value.filter(d => d.category === name && d.status === 'drifted').length,
+      missing: diffResults.value.filter(d => d.category === name && (d.status === 'missing_in_code' || d.status === 'missing_in_figma')).length,
+      score: 0,
+      delta: 0,
+    }))
+  }
+  if (isFigmaOnly.value) return figmaTokens.categories.value
+  return mock.categories
+})
 
 const activeCategory = ref('all')
 const activeStatus = ref('all')
 const search = ref('')
 
-const driftedCount = computed(() => tokens.filter(t => t.figma !== t.code).length)
-const syncedCount = computed(() => tokens.filter(t => t.figma === t.code).length)
+const driftedCount = computed(() => tokens.value.filter(t => t.status === 'drifted').length)
+const syncedCount = computed(() => tokens.value.filter(t => t.status === 'synced').length)
+const missingCount = computed(() => tokens.value.filter(t => t.status === 'missing_in_code' || t.status === 'missing_in_figma').length)
 
 const filterTabs = computed(() => [
-  { key: 'all', label: 'All', count: tokens.length, dot: null },
-  ...categories.map(c => ({
+  { key: 'all', label: 'All', count: tokens.value.length, dot: null },
+  ...categories.value.map((c: any) => ({
     key: c.name,
     label: c.name,
-    count: tokens.filter(t => t.category === c.name).length,
+    count: tokens.value.filter(t => t.category === c.name).length,
     dot: null,
   })),
 ])
 
 const filteredTokens = computed(() => {
-  let list = [...tokens]
+  let list = [...tokens.value]
   if (activeCategory.value !== 'all') {
     list = list.filter(t => t.category === activeCategory.value)
   }
   if (activeStatus.value === 'synced') {
-    list = list.filter(t => t.figma === t.code)
+    list = list.filter(t => t.status === 'synced')
   } else if (activeStatus.value === 'drifted') {
-    list = list.filter(t => t.figma !== t.code)
+    list = list.filter(t => t.status === 'drifted')
+  } else if (activeStatus.value === 'missing') {
+    list = list.filter(t => t.status === 'missing_in_code' || t.status === 'missing_in_figma')
   }
   if (search.value) {
     const q = search.value.toLowerCase()

@@ -177,34 +177,96 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { TrendingUp, Palette, Square, Type, Sun, Box, Layers, GitBranch, Check, Bell } from 'lucide-vue-next'
 
-const { healthScore, categories, recentUpdates, linearTickets } = useMockData()
+// Real data sources
+const { connection: figmaConn, fetchStatus: fetchFigmaStatus } = useFigmaConnection()
+const { connection: ghConn, fetchStatus: fetchGhStatus } = useGitHubConnection()
+const figmaTokens = useFigmaTokens()
+const { summary: diffSummary, categories: diffCategories, fetchResults: fetchDiffResults } = useTokenDiff()
+
+// Mock data as fallback
+const mock = useMockData()
+
+// Both connected = real diff mode
+const hasDiff = computed(() => diffSummary.value && diffSummary.value.total > 0)
+
+// Fetch real data on mount
+onMounted(async () => {
+  await Promise.all([fetchFigmaStatus(), fetchGhStatus()])
+  if (figmaConn.value.connected) {
+    await figmaTokens.fetchTokens()
+  }
+  // Load diff results if both are connected
+  if (figmaConn.value.connected && ghConn.value.connected) {
+    await fetchDiffResults()
+  }
+})
+
+// Use diff data when available, Figma-only when connected, mock otherwise
+const healthScore = computed(() => {
+  if (hasDiff.value) {
+    return {
+      score: diffSummary.value!.healthScore,
+      change: 0,
+      totalTokens: diffSummary.value!.total,
+      synced: diffSummary.value!.synced,
+      drifted: diffSummary.value!.drifted,
+      missing: diffSummary.value!.missingInCode + diffSummary.value!.missingInFigma,
+    }
+  }
+  if (figmaConn.value.connected && figmaTokens.tokens.value.length > 0) {
+    return figmaTokens.healthScore.value
+  }
+  return mock.healthScore
+})
+
+const categories = computed(() => {
+  if (hasDiff.value) {
+    return diffCategories.value.map(c => ({
+      name: c.name,
+      icon: '',
+      count: c.total,
+      synced: c.synced,
+      drifted: c.drifted,
+      missing: c.missing,
+      score: c.total > 0 ? Math.round((c.synced / c.total) * 100) : 0,
+      delta: 0,
+    }))
+  }
+  if (figmaConn.value.connected && figmaTokens.tokens.value.length > 0) {
+    return figmaTokens.categories.value
+  }
+  return mock.categories
+})
+
+const recentUpdates = mock.recentUpdates
+const linearTickets = mock.linearTickets
 
 const scoreStats = computed(() => [
-  { label: 'Synced', value: healthScore.synced, color: '#22c55e' },
-  { label: 'Drifted', value: healthScore.drifted, color: '#d97706' },
-  { label: 'Missing', value: healthScore.missing, color: '#dc2626' },
+  { label: 'Synced', value: healthScore.value.synced, color: '#22c55e' },
+  { label: 'Drifted', value: healthScore.value.drifted, color: '#d97706' },
+  { label: 'Missing', value: healthScore.value.missing, color: '#dc2626' },
 ])
 
 const scoreKeyword = computed(() => {
-  if (healthScore.score >= 80) return { label: 'Excellent', bg: '#dcfce7', color: '#15803d' }
-  if (healthScore.score >= 60) return { label: 'Good', bg: '#fef9c3', color: '#a16207' }
-  if (healthScore.score >= 40) return { label: 'At Risk', bg: '#ffedd5', color: '#c2410c' }
+  if (healthScore.value.score >= 80) return { label: 'Excellent', bg: '#dcfce7', color: '#15803d' }
+  if (healthScore.value.score >= 60) return { label: 'Good', bg: '#fef9c3', color: '#a16207' }
+  if (healthScore.value.score >= 40) return { label: 'At Risk', bg: '#ffedd5', color: '#c2410c' }
   return { label: 'Critical', bg: '#fee2e2', color: '#dc2626' }
 })
 
 const scoreDescription = computed(() => {
-  if (healthScore.score >= 80) return 'Your design system is well synced. Most tokens match between Figma and code.'
-  if (healthScore.score >= 60) return 'Some tokens have drifted or are missing. Review the categories below to identify gaps.'
-  if (healthScore.score >= 40) return 'Significant drift detected between your design system and codebase. Action recommended.'
+  if (healthScore.value.score >= 80) return 'Your design system is well synced. Most tokens match between Figma and code.'
+  if (healthScore.value.score >= 60) return 'Some tokens have drifted or are missing. Review the categories below to identify gaps.'
+  if (healthScore.value.score >= 40) return 'Significant drift detected between your design system and codebase. Action recommended.'
   return 'Your design system is largely out of sync. Immediate attention needed to restore parity.'
 })
 
 const ringColor = computed(() => {
-  if (healthScore.score >= 70) return '#22c55e'
-  if (healthScore.score >= 40) return '#f59e0b'
+  if (healthScore.value.score >= 70) return '#22c55e'
+  if (healthScore.value.score >= 40) return '#f59e0b'
   return '#ef4444'
 })
 

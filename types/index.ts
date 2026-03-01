@@ -76,3 +76,73 @@ export interface LinearTicket {
   priority: 'high' | 'medium' | 'low'
   component: string
 }
+
+// Figma component from DB
+export interface FigmaComponent {
+  id: string
+  name: string
+  description: string
+  figma_node_id: string
+  component_set_name?: string
+  variant_count: number
+  page_name?: string
+  synced_at?: string
+}
+
+// Figma API types
+export interface FigmaConnection {
+  connected: boolean
+  fileKey?: string
+  fileName?: string
+  lastSynced?: string
+  tokenCount?: number
+}
+
+export interface FigmaToken {
+  id: string
+  name: string
+  category: string
+  figma_value: string
+  node_id?: string
+  style_type?: string
+  synced_at?: string
+}
+
+// GitHub API types
+export interface GitHubConnection {
+  connected: boolean
+  repoOwner?: string
+  repoName?: string
+  configPath?: string
+  lastSynced?: string
+  tokenCount?: number
+}
+
+export interface CodeToken {
+  id: string
+  name: string
+  category: string
+  code_value: string
+  source_file?: string
+  synced_at?: string
+}
+
+// Diff types
+export interface TokenDiff {
+  id?: string
+  tokenName: string
+  category: string
+  figmaValue: string | null
+  codeValue: string | null
+  status: 'synced' | 'drifted' | 'missing_in_code' | 'missing_in_figma'
+  severity: 'low' | 'medium' | 'high' | null
+}
+
+export interface DiffSummaryData {
+  total: number
+  synced: number
+  drifted: number
+  missingInCode: number
+  missingInFigma: number
+  healthScore: number
+}

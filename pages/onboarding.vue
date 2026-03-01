@@ -50,31 +50,75 @@
             <div>
               <div style="font-size: 13px; font-weight: 600; color: #09090B">Connected</div>
               <div style="font-size: 12px; color: #71717A; margin-top: 1px">
-                Riot Design System &middot; 142 variables &middot; 24 components
+                {{ figmaFileName }} &middot; {{ figmaTokenCount }} tokens
               </div>
             </div>
           </div>
 
-          <!-- Connect button -->
-          <button
-            v-if="!figmaConnected"
-            style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 14px 24px; background: #FFFFFF; border: 1.5px solid #E4E4E7; border-radius: 12px; font-size: 14px; font-weight: 600; color: #09090B; cursor: pointer; transition: all 0.15s ease"
-            @click="connectFigma"
-            @mouseenter="(e: MouseEvent) => { (e.currentTarget as HTMLElement).style.borderColor = '#D4D4D8'; (e.currentTarget as HTMLElement).style.background = '#FAFAFA' }"
-            @mouseleave="(e: MouseEvent) => { (e.currentTarget as HTMLElement).style.borderColor = '#E4E4E7'; (e.currentTarget as HTMLElement).style.background = '#FFFFFF' }"
-          >
-            <svg width="20" height="20" viewBox="0 0 38 57" fill="none">
-              <path d="M19 28.5a9.5 9.5 0 1 1 19 0 9.5 9.5 0 0 1-19 0z" fill="#1ABCFE" />
-              <path d="M0 47.5A9.5 9.5 0 0 1 9.5 38H19v9.5a9.5 9.5 0 1 1-19 0z" fill="#0ACF83" />
-              <path d="M19 0v19h9.5a9.5 9.5 0 1 0 0-19H19z" fill="#FF7262" />
-              <path d="M0 9.5A9.5 9.5 0 0 0 9.5 19H19V0H9.5A9.5 9.5 0 0 0 0 9.5z" fill="#F24E1E" />
-              <path d="M0 28.5A9.5 9.5 0 0 0 9.5 38H19V19H9.5A9.5 9.5 0 0 0 0 28.5z" fill="#A259FF" />
-            </svg>
-            Connect with Figma
-            <span style="font-size: 11px; font-weight: 500; color: #A1A1AA; background: #F4F4F5; padding: 2px 8px; border-radius: 6px; margin-left: 4px">
-              OAuth
-            </span>
-          </button>
+          <!-- Connect form -->
+          <div v-if="!figmaConnected" style="display: flex; flex-direction: column; gap: 14px">
+            <!-- PAT Input -->
+            <div>
+              <label style="font-size: 12px; font-weight: 600; color: #09090B; display: block; margin-bottom: 6px">
+                Personal Access Token
+              </label>
+              <input
+                v-model="figmaPat"
+                type="password"
+                placeholder="figd_xxxxxxxxxx"
+                style="width: 100%; padding: 10px 14px; border: 1.5px solid #E4E4E7; border-radius: 10px; font-size: 13px; color: #09090B; outline: none; background: #FFFFFF; transition: border-color 0.15s ease; box-sizing: border-box; font-family: inherit"
+                @focus="(e: FocusEvent) => { (e.target as HTMLElement).style.borderColor = '#D4D4D8' }"
+                @blur="(e: FocusEvent) => { (e.target as HTMLElement).style.borderColor = '#E4E4E7' }"
+              />
+              <a
+                href="https://www.figma.com/developers/api#access-tokens"
+                target="_blank"
+                style="font-size: 11px; color: #71717A; margin-top: 4px; display: inline-block; text-decoration: underline"
+              >
+                How to get a token →
+              </a>
+            </div>
+
+            <!-- File URL Input -->
+            <div>
+              <label style="font-size: 12px; font-weight: 600; color: #09090B; display: block; margin-bottom: 6px">
+                Figma file URL
+              </label>
+              <input
+                v-model="figmaFileUrl"
+                type="text"
+                placeholder="https://figma.com/design/abc123/..."
+                style="width: 100%; padding: 10px 14px; border: 1.5px solid #E4E4E7; border-radius: 10px; font-size: 13px; color: #09090B; outline: none; background: #FFFFFF; transition: border-color 0.15s ease; box-sizing: border-box; font-family: inherit"
+                @focus="(e: FocusEvent) => { (e.target as HTMLElement).style.borderColor = '#D4D4D8' }"
+                @blur="(e: FocusEvent) => { (e.target as HTMLElement).style.borderColor = '#E4E4E7' }"
+              />
+            </div>
+
+            <!-- Error message -->
+            <div v-if="figmaError" style="padding: 10px 14px; background: #FEF2F2; border: 1px solid #FECACA; border-radius: 8px; font-size: 12px; color: #DC2626">
+              {{ figmaError }}
+            </div>
+
+            <!-- Connect button -->
+            <button
+              :disabled="!figmaPat || !figmaFileUrl || figmaLoading"
+              style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 14px 24px; background: #2C2C2E; border: none; border-radius: 12px; font-size: 14px; font-weight: 600; color: #FFFFFF; cursor: pointer; transition: all 0.15s ease; font-family: inherit"
+              :style="{
+                opacity: (!figmaPat || !figmaFileUrl || figmaLoading) ? 0.5 : 1,
+                cursor: (!figmaPat || !figmaFileUrl || figmaLoading) ? 'not-allowed' : 'pointer',
+              }"
+              @click="connectFigma"
+            >
+              <svg v-if="!figmaLoading" width="18" height="18" viewBox="0 0 38 57" fill="none">
+                <path d="M19 28.5a9.5 9.5 0 1 1 19 0 9.5 9.5 0 0 1-19 0z" fill="#1ABCFE" />
+                <path d="M0 47.5A9.5 9.5 0 0 1 9.5 38H19v9.5a9.5 9.5 0 1 1-19 0z" fill="#0ACF83" />
+                <path d="M19 0v19h9.5a9.5 9.5 0 1 0 0-19H19z" fill="#FF7262" />
+                <path d="M0 9.5A9.5 9.5 0 0 0 9.5 19H19V0H9.5A9.5 9.5 0 0 0 0 9.5z" fill="#F24E1E" />
+                <path d="M0 28.5A9.5 9.5 0 0 0 9.5 38H19V19H9.5A9.5 9.5 0 0 0 0 28.5z" fill="#A259FF" />
+              </svg>
+              {{ figmaLoading ? 'Connecting...' : 'Connect Figma' }}
+            </button>
+          </div>
         </template>
 
         <!-- Step 1: Connect Git -->
@@ -288,7 +332,7 @@
               </div>
               <div>
                 <div style="font-size: 15px; font-weight: 650; color: #F4F4F5; letter-spacing: -0.3px">
-                  Riot Design System
+                  {{ figmaFileName || 'Design System' }}
                 </div>
                 <div style="font-size: 12px; color: #71717A; margin-top: 2px">
                   Connected just now
@@ -475,6 +519,15 @@ definePageMeta({
   layout: false,
 })
 
+// ── Figma real connection ──────────────────────────────
+const { connection: figmaConnection, connect: figmaConnect, loading: figmaLoadingState, error: figmaErrorState } = useFigmaConnection()
+const figmaPat = ref('')
+const figmaFileUrl = ref('')
+const figmaLoading = ref(false)
+const figmaError = ref<string | null>(null)
+const figmaFileName = ref('')
+const figmaTokenCount = ref(0)
+
 // ── State ──────────────────────────────────────────────
 const step = ref(0)
 const figmaConnected = ref(false)
@@ -508,11 +561,11 @@ const helperText = computed(() => {
   }
 })
 
-const previewFigmaStats = [
-  { value: '142', label: 'Variables' },
-  { value: '38', label: 'Styles' },
-  { value: '24', label: 'Components' },
-]
+const previewFigmaStats = computed(() => [
+  { value: figmaTokenCount.value > 0 ? String(figmaTokenCount.value) : '—', label: 'Tokens' },
+  { value: figmaFileName.value ? '1' : '—', label: 'File' },
+  { value: '✓', label: 'Connected' },
+])
 
 const previewGitFiles = [
   { name: 'src/tokens/colors.json' },
@@ -524,8 +577,26 @@ const previewGitFiles = [
 ]
 
 // ── Actions ────────────────────────────────────────────
-function connectFigma() {
-  figmaConnected.value = true
+async function connectFigma() {
+  if (!figmaPat.value || !figmaFileUrl.value) return
+
+  // Extract file key from URL
+  const match = figmaFileUrl.value.match(/figma\.com\/(?:design|file)\/([a-zA-Z0-9]+)/)
+  const fileKey = match ? match[1] : figmaFileUrl.value.trim()
+
+  figmaLoading.value = true
+  figmaError.value = null
+
+  try {
+    const result = await figmaConnect(figmaPat.value.trim(), fileKey)
+    figmaConnected.value = true
+    figmaFileName.value = result.fileName
+    figmaTokenCount.value = 0 // Will be populated after sync
+  } catch (e: any) {
+    figmaError.value = e?.data?.message || 'Failed to connect to Figma. Check your token and file URL.'
+  } finally {
+    figmaLoading.value = false
+  }
 }
 
 function connectGit() {

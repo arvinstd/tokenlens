@@ -65,11 +65,13 @@
     <!-- Bottom: Sync button -->
     <button
       class="scan-btn"
-      @mouseenter="(e: MouseEvent) => { (e.currentTarget as HTMLElement).style.background = '#333' }"
+      :disabled="syncing"
+      @click="handleSync"
+      @mouseenter="(e: MouseEvent) => { if (!syncing) (e.currentTarget as HTMLElement).style.background = '#333' }"
       @mouseleave="(e: MouseEvent) => { (e.currentTarget as HTMLElement).style.background = '#1a1a1a' }"
     >
-      <RefreshCw :size="13" :stroke-width="2.2" />
-      Sync
+      <RefreshCw :size="13" :stroke-width="2.2" :class="{ 'animate-spin-slow': syncing }" />
+      {{ syncing ? 'Syncing...' : 'Sync' }}
     </button>
 
     <!-- User profile -->
@@ -99,10 +101,19 @@ const route = useRoute()
 const supabase = useSupabaseClient()
 const user = useSupabaseUser()
 const searchOpen = ref(false)
+const { syncing, sync } = useFigmaConnection()
 
 async function handleLogout() {
   await supabase.auth.signOut()
   navigateTo('/login')
+}
+
+async function handleSync() {
+  try {
+    await sync()
+  } catch {
+    // Error handled by composable
+  }
 }
 
 const tabs = [
@@ -267,5 +278,16 @@ onMounted(() => {
 .logout-btn:hover {
   color: #ef4444;
   background: #fef2f2;
+}
+.scan-btn:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+.animate-spin-slow {
+  animation: spin 1.2s linear infinite;
+}
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 </style>
