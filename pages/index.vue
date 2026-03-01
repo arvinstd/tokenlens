@@ -1,5 +1,11 @@
 <script setup lang="ts">
-navigateTo('/onboarding')
+const user = useSupabaseUser()
+
+if (user.value) {
+  navigateTo('/dashboard')
+} else {
+  navigateTo('/login')
+}
 </script>
 
 <template>
