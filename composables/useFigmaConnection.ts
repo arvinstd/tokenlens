@@ -50,7 +50,7 @@ export function useFigmaConnection() {
     syncing.value = true
     error.value = null
     try {
-      const data = await $fetch<{ tokenCount: number; componentCount: number; categories: Record<string, number> }>('/api/figma/sync', {
+      const data = await $fetch<{ tokenCount: number; componentCount: number; categories: Record<string, number>; debug?: { styleTokens: number; variableTokens: number; variablesStatus: string; variablesError: string | null } }>('/api/figma/sync', {
         method: 'POST',
       })
       // Refresh connection status after sync

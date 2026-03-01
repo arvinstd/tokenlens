@@ -110,7 +110,10 @@ async function handleLogout() {
 
 async function handleSync() {
   try {
-    await sync()
+    const result = await sync()
+    if (result?.debug) {
+      console.log('[sync] Debug:', result.debug)
+    }
   } catch {
     // Error handled by composable
   }

@@ -132,8 +132,17 @@
               </button>
               <button class="btn-ghost" @click="handleDisconnect">Disconnect</button>
             </div>
-            <div v-if="syncResult" style="margin-top: 12px; padding: 10px 14px; background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 8px; font-size: 12px; color: #166534">
-              Synced {{ syncResult.tokenCount }} tokens &middot; {{ syncResult.componentCount }} components
+            <div v-if="syncResult" style="margin-top: 12px">
+              <div style="padding: 10px 14px; background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 8px; font-size: 12px; color: #166534">
+                ✓ Synced {{ syncResult.tokenCount }} tokens &middot; {{ syncResult.componentCount }} components
+                <span v-if="syncResult.debug" style="display: block; margin-top: 4px; color: #4B5563; font-size: 11px">
+                  {{ syncResult.debug.styleTokens }} from styles · {{ syncResult.debug.variableTokens }} from variables
+                </span>
+              </div>
+              <div v-if="syncResult.debug?.variablesStatus === 'unavailable'" style="margin-top: 8px; padding: 10px 14px; background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 8px; font-size: 11px; color: #92400E">
+                ⚠ Figma Variables API unavailable{{ syncResult.debug.variablesError ? `: ${syncResult.debug.variablesError}` : '' }}.
+                Spacing, border-radius, and color variables were not extracted. This API may require a Figma Enterprise or Organization plan.
+              </div>
             </div>
           </div>
 

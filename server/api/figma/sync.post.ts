@@ -30,9 +30,10 @@ export default defineEventHandler(async (event) => {
     }),
     getFileComponents(pat, fileKey).catch(() => null),
     getLocalVariables(pat, fileKey).catch((error: any) => {
-      // Variables API requires Enterprise/Organization plan — fail silently
-      console.warn('[figma/sync] Variables API not available:', error?.status || error?.message)
-      return null
+      const status = error?.status || error?.statusCode || error?.data?.status
+      console.warn(`[figma/sync] Variables API failed (status ${status}):`, error?.message || error?.data?.message || 'unknown')
+      // Return error info instead of null so we can report it
+      return { _error: true, status, message: error?.message || error?.data?.message || 'Variables API unavailable' }
     }),
   ])
 
@@ -62,10 +63,25 @@ export default defineEventHandler(async (event) => {
 
   // 3b. Parse variable tokens (COLOR, FLOAT — spacing, radius, etc.)
   let variableTokens: any[] = []
-  if (variablesResponse?.meta) {
+  let variablesStatus: 'ok' | 'unavailable' | 'empty' = 'unavailable'
+  let variablesError: string | null = null
+
+  if (variablesResponse && !(variablesResponse as any)._error && variablesResponse?.meta) {
     const { variableCollections, variables } = variablesResponse.meta
-    variableTokens = parseVariables(variableCollections, variables)
-    console.log(`[figma/sync] Parsed ${variableTokens.length} variable tokens`)
+    const collectionCount = Object.keys(variableCollections || {}).length
+    const variableCount = Object.keys(variables || {}).length
+    console.log(`[figma/sync] Variables API: ${collectionCount} collections, ${variableCount} variables`)
+
+    if (variableCount > 0) {
+      variableTokens = parseVariables(variableCollections, variables)
+      variablesStatus = 'ok'
+      console.log(`[figma/sync] Parsed ${variableTokens.length} variable tokens`)
+    } else {
+      variablesStatus = 'empty'
+    }
+  } else if (variablesResponse && (variablesResponse as any)._error) {
+    variablesError = (variablesResponse as any).message
+    console.warn(`[figma/sync] Variables API error: ${variablesError}`)
   }
 
   // 4. Merge + deduplicate (variables take priority over styles for same name)
@@ -293,5 +309,11 @@ export default defineEventHandler(async (event) => {
     tokenCount: tokens.length,
     componentCount,
     categories,
+    debug: {
+      styleTokens: styleTokens.length,
+      variableTokens: variableTokens.length,
+      variablesStatus,
+      variablesError,
+    },
   }
 })
