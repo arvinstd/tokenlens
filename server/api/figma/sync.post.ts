@@ -1,6 +1,6 @@
 import { serverSupabaseClient } from '#supabase/server'
 import { getFileStyles, getFileComponents, getNodes, getLocalVariables } from '~/server/utils/figma-client'
-import { parseAllStyles, parseVariables } from '~/server/utils/figma-parser'
+import { parseAllStyles, parseVariables, extractDesignValuesFromNodes } from '~/server/utils/figma-parser'
 import { requireUser } from '~/server/utils/auth'
 
 export default defineEventHandler(async (event) => {
@@ -63,7 +63,7 @@ export default defineEventHandler(async (event) => {
 
   // 3b. Parse variable tokens (COLOR, FLOAT — spacing, radius, etc.)
   let variableTokens: any[] = []
-  let variablesStatus: 'ok' | 'unavailable' | 'empty' = 'unavailable'
+  let variablesStatus: 'ok' | 'unavailable' | 'empty' | 'extracted' = 'unavailable'
   let variablesError: string | null = null
 
   if (variablesResponse && !(variablesResponse as any)._error && variablesResponse?.meta) {
@@ -82,6 +82,43 @@ export default defineEventHandler(async (event) => {
   } else if (variablesResponse && (variablesResponse as any)._error) {
     variablesError = (variablesResponse as any).message
     console.warn(`[figma/sync] Variables API error: ${variablesError}`)
+  }
+
+  // 3c. Fallback: extract spacing & radius from component node trees
+  //     when Variables API is unavailable (non-Enterprise plans)
+  if (variablesStatus === 'unavailable' && fileData?.meta?.components) {
+    console.log(`[figma/sync] Variables API unavailable — extracting values from component nodes...`)
+    const components = fileData.meta.components
+
+    // Collect unique node IDs (component sets for grouped, node_id for standalone)
+    const nodeIdSet = new Set<string>()
+    for (const comp of components) {
+      if (comp.containing_component_set) {
+        nodeIdSet.add(comp.containing_component_set.nodeId)
+      } else {
+        nodeIdSet.add(comp.node_id)
+      }
+      if (nodeIdSet.size >= 200) break // cap to avoid excessive API calls
+    }
+
+    const componentNodeIds = [...nodeIdSet]
+    const allComponentNodes: Record<string, { document: any }> = {}
+    const COMP_BATCH = 50
+
+    for (let i = 0; i < componentNodeIds.length; i += COMP_BATCH) {
+      const batch = componentNodeIds.slice(i, i + COMP_BATCH)
+      try {
+        const nodesResponse = await getNodes(pat, fileKey, batch)
+        Object.assign(allComponentNodes, nodesResponse.nodes)
+      } catch {
+        console.warn(`[figma/sync] Failed to fetch component nodes batch ${i}-${i + COMP_BATCH}`)
+      }
+    }
+
+    const existingNames = new Set(styleTokens.map((t: any) => t.name))
+    variableTokens = extractDesignValuesFromNodes(allComponentNodes, existingNames)
+    variablesStatus = variableTokens.length > 0 ? 'extracted' : 'empty'
+    console.log(`[figma/sync] Extracted ${variableTokens.length} design values from ${Object.keys(allComponentNodes).length} component nodes`)
   }
 
   // 4. Merge + deduplicate (variables take priority over styles for same name)

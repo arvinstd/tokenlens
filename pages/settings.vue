@@ -136,46 +136,13 @@
               <div style="padding: 10px 14px; background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 8px; font-size: 12px; color: #166534">
                 ✓ Synced {{ syncResult.tokenCount }} tokens &middot; {{ syncResult.componentCount }} components
                 <span v-if="syncResult.debug" style="display: block; margin-top: 4px; color: #4B5563; font-size: 11px">
-                  {{ syncResult.debug.styleTokens }} from styles · {{ syncResult.debug.variableTokens }} from variables
+                  {{ syncResult.debug.styleTokens }} from styles ·
+                  {{ syncResult.debug.variableTokens }} from {{ syncResult.debug.variablesStatus === 'extracted' ? 'components' : 'variables' }}
                 </span>
               </div>
-              <!-- Variables import section (when API unavailable) -->
-              <div v-if="syncResult.debug?.variablesStatus === 'unavailable'" style="margin-top: 8px; padding: 14px; background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 8px">
-                <div style="font-size: 12px; font-weight: 600; color: #92400E; margin-bottom: 6px">
-                  ⚠ Variables API requires Enterprise plan
-                </div>
-                <p style="font-size: 11px; color: #92400E; margin: 0 0 10px; line-height: 1.5">
-                  Spacing, border-radius, and color variables were not extracted.
-                  You can import them manually using a free Figma plugin:
-                </p>
-                <ol style="font-size: 11px; color: #78350F; margin: 0 0 12px; padding-left: 18px; line-height: 1.7">
-                  <li>Install <a href="https://www.figma.com/community/plugin/1253571037276959291/variables2json" target="_blank" style="color: #B45309; text-decoration: underline">variables2json</a> in Figma</li>
-                  <li>Run the plugin → Export → Copy JSON</li>
-                  <li>Paste the JSON below</li>
-                </ol>
-                <textarea
-                  v-model="variablesJson"
-                  placeholder='Paste your variables JSON here...'
-                  style="width: 100%; height: 100px; padding: 10px 12px; border: 1px solid #FDE68A; border-radius: 8px; font-size: 12px; font-family: 'SF Mono', ui-monospace, monospace; color: #09090B; resize: vertical; outline: none; background: #FFFEF5; box-sizing: border-box"
-                  @focus="($event.target as HTMLTextAreaElement).style.borderColor = '#D97706'"
-                  @blur="($event.target as HTMLTextAreaElement).style.borderColor = '#FDE68A'"
-                />
-                <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px">
-                  <button
-                    class="btn-primary"
-                    style="font-size: 12px; padding: 7px 14px"
-                    :disabled="!variablesJson.trim() || importingVars"
-                    @click="handleImportVariables"
-                  >
-                    {{ importingVars ? 'Importing...' : 'Import Variables' }}
-                  </button>
-                  <span v-if="importResult" style="font-size: 11px; color: #166534">
-                    ✓ {{ importResult.importedCount }} tokens imported ({{ importResult.format }})
-                  </span>
-                  <span v-if="importError" style="font-size: 11px; color: #DC2626">
-                    {{ importError }}
-                  </span>
-                </div>
+              <!-- Info note when extracted from components (non-Enterprise fallback) -->
+              <div v-if="syncResult.debug?.variablesStatus === 'extracted'" style="margin-top: 8px; padding: 10px 14px; background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 8px; font-size: 11px; color: #1E40AF; line-height: 1.5">
+                Spacing & border-radius values extracted automatically from component analysis.
               </div>
             </div>
           </div>
@@ -318,10 +285,6 @@ const { connection, syncing, loading, error, fetchStatus, connect, sync, disconn
 const pat = ref('')
 const fileUrl = ref('')
 const syncResult = ref<{ tokenCount: number; componentCount: number; categories: Record<string, number>; debug?: any } | null>(null)
-const variablesJson = ref('')
-const importingVars = ref(false)
-const importResult = ref<{ importedCount: number; format: string } | null>(null)
-const importError = ref<string | null>(null)
 
 // === GitHub ===
 const {
@@ -377,32 +340,6 @@ async function handleSync() {
     syncResult.value = await sync()
   } catch {
     // Error is handled by composable
-  }
-}
-
-async function handleImportVariables() {
-  importingVars.value = true
-  importResult.value = null
-  importError.value = null
-  try {
-    const data = await $fetch<{ importedCount: number; format: string; categories: Record<string, number> }>('/api/figma/import-variables', {
-      method: 'POST',
-      body: { json: variablesJson.value },
-    })
-    importResult.value = data
-    // Update sync result count to reflect new total
-    if (syncResult.value) {
-      syncResult.value.tokenCount += data.importedCount
-      if (syncResult.value.debug) {
-        syncResult.value.debug.variableTokens = data.importedCount
-      }
-    }
-    // Refresh connection status to get new token count
-    await fetchStatus()
-  } catch (e: any) {
-    importError.value = e?.data?.message || 'Import failed'
-  } finally {
-    importingVars.value = false
   }
 }
 

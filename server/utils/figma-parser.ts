@@ -317,6 +317,85 @@ function findDefaultModeForVariable(
   return modeIds[0] || null
 }
 
+/**
+ * Extract design values (spacing, border-radius) from component node trees.
+ * Used as automatic fallback when Variables REST API is unavailable (non-Enterprise plans).
+ * Walks the node subtrees and collects unique auto-layout spacing + corner radius values.
+ */
+export function extractDesignValuesFromNodes(
+  nodes: Record<string, { document: any }>,
+  existingTokenNames: Set<string>,
+): ParsedToken[] {
+  const spacingValues = new Set<number>()
+  const radiusValues = new Set<number>()
+
+  function walkNode(node: any) {
+    if (!node) return
+
+    // Auto-layout spacing (gap + padding)
+    if (node.layoutMode === 'HORIZONTAL' || node.layoutMode === 'VERTICAL') {
+      if (typeof node.itemSpacing === 'number' && node.itemSpacing > 0) {
+        spacingValues.add(Math.round(node.itemSpacing))
+      }
+      for (const prop of ['paddingLeft', 'paddingRight', 'paddingTop', 'paddingBottom']) {
+        const val = node[prop]
+        if (typeof val === 'number' && val > 0) {
+          spacingValues.add(Math.round(val))
+        }
+      }
+    }
+
+    // Corner radius
+    if (typeof node.cornerRadius === 'number' && node.cornerRadius > 0) {
+      radiusValues.add(Math.round(node.cornerRadius))
+    }
+    if (Array.isArray(node.rectangleCornerRadii)) {
+      for (const r of node.rectangleCornerRadii) {
+        if (typeof r === 'number' && r > 0) radiusValues.add(Math.round(r))
+      }
+    }
+
+    // Recurse into children
+    if (Array.isArray(node.children)) {
+      for (const child of node.children) walkNode(child)
+    }
+  }
+
+  for (const nodeData of Object.values(nodes)) {
+    if (nodeData?.document) walkNode(nodeData.document)
+  }
+
+  const tokens: ParsedToken[] = []
+
+  for (const val of [...spacingValues].sort((a, b) => a - b)) {
+    const name = `spacing.${val}`
+    if (!existingTokenNames.has(name)) {
+      tokens.push({
+        name,
+        category: 'Spacing',
+        figmaValue: String(val),
+        nodeId: `extracted:spacing:${val}`,
+        styleType: 'VARIABLE_FLOAT',
+      })
+    }
+  }
+
+  for (const val of [...radiusValues].sort((a, b) => a - b)) {
+    const name = `border-radius.${val}`
+    if (!existingTokenNames.has(name)) {
+      tokens.push({
+        name,
+        category: 'Border Radius',
+        figmaValue: String(val),
+        nodeId: `extracted:radius:${val}`,
+        styleType: 'VARIABLE_FLOAT',
+      })
+    }
+  }
+
+  return tokens
+}
+
 /** Parse Figma Variables into normalized tokens */
 export function parseVariables(
   collections: Record<string, VariableCollection>,
