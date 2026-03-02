@@ -239,10 +239,13 @@ export function computeDiffs(
 /** Compute summary stats from diff results */
 export function computeSummary(diffs: DiffResult[]): DiffSummary {
   const total = diffs.length
-  const synced = diffs.filter(d => d.status === 'synced').length
-  const drifted = diffs.filter(d => d.status === 'drifted').length
-  const missingInCode = diffs.filter(d => d.status === 'missing_in_code').length
-  const missingInFigma = diffs.filter(d => d.status === 'missing_in_figma').length
+  let synced = 0, drifted = 0, missingInCode = 0, missingInFigma = 0
+  for (const d of diffs) {
+    if (d.status === 'synced') synced++
+    else if (d.status === 'drifted') drifted++
+    else if (d.status === 'missing_in_code') missingInCode++
+    else if (d.status === 'missing_in_figma') missingInFigma++
+  }
   const healthScore = total > 0 ? Math.round((synced / total) * 100) : 0
 
   return { total, synced, drifted, missingInCode, missingInFigma, healthScore }

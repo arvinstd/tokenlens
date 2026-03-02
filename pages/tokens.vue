@@ -227,15 +227,15 @@
       <div class="flex gap-[16px]" style="margin-top: 16px; padding-bottom: 60px">
         <span style="font-size: 12px; color: #16A34A; display: flex; align-items: center; gap: 4px">
           <span style="width: 6px; height: 6px; border-radius: 50%; background: #16A34A; display: inline-block" />
-          {{ filteredTokens.filter(t => t.status === 'synced').length }} synced
+          {{ filteredStatusCounts.synced }} synced
         </span>
         <span style="font-size: 12px; color: #D97706; display: flex; align-items: center; gap: 4px">
           <span style="width: 6px; height: 6px; border-radius: 50%; background: #D97706; display: inline-block" />
-          {{ filteredTokens.filter(t => t.status === 'drifted').length }} drifted
+          {{ filteredStatusCounts.drifted }} drifted
         </span>
         <span v-if="hasDiff" style="font-size: 12px; color: #DC2626; display: flex; align-items: center; gap: 4px">
           <span style="width: 6px; height: 6px; border-radius: 50%; background: #DC2626; display: inline-block" />
-          {{ filteredTokens.filter(t => t.status === 'missing_in_code' || t.status === 'missing_in_figma').length }} missing
+          {{ filteredStatusCounts.missing }} missing
         </span>
       </div>
     </div>
@@ -320,9 +320,18 @@ const activeCategory = ref('all')
 const activeStatus = ref('all')
 const search = ref('')
 
-const driftedCount = computed(() => tokens.value.filter(t => t.status === 'drifted').length)
-const syncedCount = computed(() => tokens.value.filter(t => t.status === 'synced').length)
-const missingCount = computed(() => tokens.value.filter(t => t.status === 'missing_in_code' || t.status === 'missing_in_figma').length)
+const statusCounts = computed(() => {
+  let synced = 0, drifted = 0, missing = 0
+  for (const t of tokens.value) {
+    if (t.status === 'synced') synced++
+    else if (t.status === 'drifted') drifted++
+    else if (t.status === 'missing_in_code' || t.status === 'missing_in_figma') missing++
+  }
+  return { synced, drifted, missing }
+})
+const driftedCount = computed(() => statusCounts.value.drifted)
+const syncedCount = computed(() => statusCounts.value.synced)
+const missingCount = computed(() => statusCounts.value.missing)
 
 const filterTabs = computed(() => [
   { key: 'all', label: 'All', count: tokens.value.length, dot: null },
@@ -351,6 +360,16 @@ const filteredTokens = computed(() => {
     list = list.filter(t => t.name.toLowerCase().includes(q) || t.figma.toLowerCase().includes(q) || t.code.toLowerCase().includes(q))
   }
   return list
+})
+
+const filteredStatusCounts = computed(() => {
+  let synced = 0, drifted = 0, missing = 0
+  for (const t of filteredTokens.value) {
+    if (t.status === 'synced') synced++
+    else if (t.status === 'drifted') drifted++
+    else if (t.status === 'missing_in_code' || t.status === 'missing_in_figma') missing++
+  }
+  return { synced, drifted, missing }
 })
 </script>
 
