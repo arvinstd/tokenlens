@@ -68,9 +68,14 @@ function detectFormat(json: any): ImportFormat {
     }
   }
 
-  // Flat: simple key-value pairs
+  // Flat / MCP: key-value pairs (strings, numbers, Font(), Effect())
   if (keys.length > 0 && keys.every(k => typeof json[k] === 'string' || typeof json[k] === 'number')) {
     return 'flat'
+  }
+  // Partial flat: most values are primitives
+  if (keys.length > 3) {
+    const primitiveCount = keys.filter(k => typeof json[k] === 'string' || typeof json[k] === 'number').length
+    if (primitiveCount / keys.length > 0.8) return 'flat'
   }
 
   return 'unknown'
@@ -244,15 +249,81 @@ function parseDTCG(data: any, path: string[] = []): ParsedToken[] {
   return tokens
 }
 
-// ─── Flat format parser ─────────────────────────────────
+// ─── Flat / MCP format parser ───────────────────────────
+
+/** Parse Font(...) strings from Figma MCP into individual typography tokens */
+function parseFontString(key: string, fontStr: string): ParsedToken[] {
+  const tokens: ParsedToken[] = []
+  const prefix = 'font'
+  const baseName = normalizeName(key, prefix)
+
+  const sizeMatch = fontStr.match(/size:\s*(\d+)/)
+  const weightMatch = fontStr.match(/weight:\s*(\d+)/)
+  const familyMatch = fontStr.match(/family:\s*"([^"]+)"/)
+  const lineHeightMatch = fontStr.match(/lineHeight:\s*(\d+)/)
+  const letterSpacingMatch = fontStr.match(/letterSpacing:\s*(-?\d+(?:\.\d+)?)/)
+
+  if (sizeMatch) {
+    tokens.push({ name: `${baseName}.size`, category: 'Typography', figmaValue: `${sizeMatch[1]}px`, nodeId: `import:mcp:${key}:size`, styleType: 'VARIABLE_FONT' })
+  }
+  if (weightMatch) {
+    tokens.push({ name: `${baseName}.weight`, category: 'Typography', figmaValue: weightMatch[1], nodeId: `import:mcp:${key}:weight`, styleType: 'VARIABLE_FONT' })
+  }
+  if (familyMatch) {
+    tokens.push({ name: `${baseName}.family`, category: 'Typography', figmaValue: familyMatch[1], nodeId: `import:mcp:${key}:family`, styleType: 'VARIABLE_FONT' })
+  }
+  if (lineHeightMatch) {
+    tokens.push({ name: `${baseName}.line-height`, category: 'Typography', figmaValue: `${lineHeightMatch[1]}px`, nodeId: `import:mcp:${key}:lineHeight`, styleType: 'VARIABLE_FONT' })
+  }
+  if (letterSpacingMatch && letterSpacingMatch[1] !== '0') {
+    tokens.push({ name: `${baseName}.letter-spacing`, category: 'Typography', figmaValue: `${letterSpacingMatch[1]}px`, nodeId: `import:mcp:${key}:letterSpacing`, styleType: 'VARIABLE_FONT' })
+  }
+
+  return tokens
+}
+
+/** Parse Effect(...) strings from Figma MCP into shadow tokens */
+function parseEffectString(key: string, effectStr: string): ParsedToken | null {
+  // Extract the first DROP_SHADOW or INNER_SHADOW
+  const match = effectStr.match(/type:\s*(DROP_SHADOW|INNER_SHADOW),\s*color:\s*(#[0-9A-Fa-f]+),\s*offset:\s*\(([^)]+)\),\s*radius:\s*(\d+),\s*spread:\s*(\d+)/)
+  if (!match) return null
+
+  const [, , color, offsetStr, radius, spread] = match
+  const [x, y] = offsetStr.split(',').map(s => s.trim())
+  const value = `${x}px ${y}px ${radius}px ${spread}px ${color}`
+
+  return {
+    name: normalizeName(key, 'shadow'),
+    category: 'Shadows',
+    figmaValue: value.toUpperCase(),
+    nodeId: `import:mcp:${key}`,
+    styleType: 'VARIABLE_EFFECT',
+  }
+}
 
 function parseFlat(data: Record<string, string | number>): ParsedToken[] {
   const tokens: ParsedToken[] = []
 
   for (const [key, value] of Object.entries(data)) {
     const strValue = String(value)
+
+    // Handle Font() strings → explode into multiple typography tokens
+    if (strValue.startsWith('Font(')) {
+      tokens.push(...parseFontString(key, strValue))
+      continue
+    }
+
+    // Handle Effect() strings → shadow token
+    if (strValue.startsWith('Effect(')) {
+      const shadow = parseEffectString(key, strValue)
+      if (shadow) tokens.push(shadow)
+      continue
+    }
+
+    // Regular values (colors, numbers, strings)
     const isColor = isColorString(strValue)
-    const type = isColor ? 'color' : (typeof value === 'number' ? 'number' : 'string')
+    const isNumber = typeof value === 'number' || /^\d+(\.\d+)?$/.test(strValue)
+    const type = isColor ? 'color' : (isNumber ? 'number' : 'string')
     const category = detectCategory(key, type, value)
     const prefix = categoryToPrefix(category)
     const name = normalizeName(key, prefix)
